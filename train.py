@@ -4,7 +4,6 @@ import gym_object_manipulation
 import os, sys
 from arguments import get_args
 from mpi4py import MPI
-from rl_modules.ddpg_agent import ddpg_agent
 from rl_modules.sac_agent import SACAgent
 import random
 import torch
@@ -48,10 +47,7 @@ def launch(args):
         if not os.path.exists(os.path.join(args.save_dir, '{}_{}'.format(args.env_name, process))):
             os.mkdir(os.path.join(args.save_dir, '{}_{}'.format(args.env_name, process)))"""
     # create the ddpg agent to interact with the environment
-    if args.agent == "DDPG":
-        ddpg_trainer = ddpg_agent(args, env, env_params)
-        ddpg_trainer.learn()
-    elif args.agent == "SAC":
+    if args.agent == "SAC":
         sac_trainer = SACAgent(args, env, env_params)
         sac_trainer.learn()
     else:

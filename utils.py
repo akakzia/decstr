@@ -42,23 +42,22 @@ def rollout(env, env_params, agent, args, goals, animated=False):
     g = observation['desired_goal']
     # start to collect samples
     for t in range(env_params['max_timesteps']):
+        g_norm = torch.tensor(agent.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
+        ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
         with torch.no_grad():
-            if agent.architecture == 'disentangled':
-                g_norm = torch.tensor(agent.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
-                ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
-                z_ag = agent.configuration_network(ag_norm)[0]
-                z_g = agent.configuration_network(g_norm)[0]
-                """input_tensor = torch.tensor(np.concatenate([agent.o_norm.normalize(obs),
-                                                            z_ag, z_g]), dtype=torch.float32).unsqueeze(0)"""
+            if agent.architecture == 'deepsets':
                 obs_tensor = torch.tensor(agent.o_norm.normalize(obs), dtype=torch.float32).unsqueeze(0)
-                ag_tensor = z_ag.clone().detach().unsqueeze(0)
-                g_tensor = z_g.clone().detach().unsqueeze(0)
                 agent.model.forward_pass(obs_tensor, ag_norm, g_norm)
                 action = agent.model.pi_tensor.numpy()
-
+            elif agent.architecture == 'disentangled':
+                z_ag = agent.configuration_network(ag_norm)[0]
+                z_g = agent.configuration_network(g_norm)[0]
+                input_tensor = torch.tensor(np.concatenate([agent.o_norm.normalize(obs), z_ag, z_g]),
+                                            dtype=torch.float32).unsqueeze(0)
+                action = agent._select_actions(input_tensor, eval=True)
             else:
-                input_tensor = agent._preproc_inputs(obs, g)  # PROCESSING TO CHECK
-            #action = agent._select_actions(input_tensor, eval=eval)
+                input_tensor = agent._preproc_inputs(obs, ag, g)  # PROCESSING TO CHECK
+                action = agent._select_actions(input_tensor, eval=True)
         # feed the actions into the environment
         if animated:
             env.render()

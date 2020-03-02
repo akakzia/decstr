@@ -3,12 +3,9 @@ import os
 from datetime import datetime
 import numpy as np
 from mpi4py import MPI
-import json
-import itertools
-import torch.nn.functional as F
 from mpi_utils.mpi_utils import sync_networks, sync_grads
 from rl_modules.replay_buffer import MultiHeadBuffer, replay_buffer
-from rl_modules.sac_models import QNetwork, GaussianPolicy, ConfigNetwork, QNetwork01, GaussianPolicy01
+from rl_modules.sac_models import QNetworkFlat, GaussianPolicyFlat, ConfigNetwork, QNetworkDisentangled, GaussianPolicyDisentangled
 from mpi_utils.normalizer import normalizer
 from her_modules.her import her_sampler
 from queues import CompetenceQueue
@@ -17,6 +14,8 @@ import pickle as pkl
 from rl_modules.sac_deepset_models import DeepSetSAC
 from stats import save_plot
 from updates import update_flat, update_disentangled, update_deepsets
+from logger import log_results
+from evaluation import eval_agent
 """
 SAC with HER (MPI-version)
 """
@@ -48,7 +47,7 @@ class SACAgent:
         # create the network
         self.architecture = self.args.architecture
         if self.architecture == 'disentangled':
-            self.actor_network = GaussianPolicyDisentalngled(env_params)
+            self.actor_network = GaussianPolicyDisentangled(env_params)
             self.critic_network = QNetworkDisentangled(env_params)
             self.configuration_network = ConfigNetwork(env_params)
             # sync the networks across the CPUs
@@ -63,7 +62,7 @@ class SACAgent:
                                                  lr=self.args.lr_actor)
             self.critic_optim = torch.optim.Adam(list(self.critic_network.parameters()) + list(self.configuration_network.parameters()),
                                                  lr=self.args.lr_critic)
-            #self.configuration_optim = torch.optim.Adam(self.configuration_network.parameters(), lr=self.args.lr_critic)
+            # self.configuration_optim = torch.optim.Adam(self.configuration_network.parameters(), lr=self.args.lr_critic)
         elif self.architecture == 'flat':
             self.actor_network = GaussianPolicyFlat(env_params)
             self.critic_network = QNetworkFlat(env_params)
@@ -84,7 +83,7 @@ class SACAgent:
             sync_networks(self.model.rho_critic)
             sync_networks(self.model.single_phi_actor)
             sync_networks(self.model.single_phi_critic)
-            sync_networks(self.configuration_network)
+            sync_networks(self.model.attention)
 
             hard_update(self.model.single_phi_target_critic, self.model.single_phi_critic)
             hard_update(self.model.rho_target_critic, self.model.rho_critic)
@@ -179,12 +178,17 @@ class SACAgent:
                         critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = self._update_network()
                     else:
                         critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = self._update_network_disentangled()"""
-                    critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = self._update_network(self.architecture)
+                    critic_loss, policy_loss, ent_loss, alpha = self._update_network(mb_buckets[1])
                 # soft update
-                self._soft_update_target_network(self.model.single_phi_target_critic, self.model.single_phi_critic)
-                self._soft_update_target_network(self.model.rho_target_critic, self.model.rho_critic)
-            overall_stats = self.log_results(epoch, overall_stats, evaluations=True, frequency=10, store_model=True,
-                                             store_stats=False, separate_goals=False)
+                if self.architecture == 'deepsets':
+                    self._soft_update_target_network(self.model.single_phi_target_critic, self.model.single_phi_critic)
+                    self._soft_update_target_network(self.model.rho_target_critic, self.model.rho_critic)
+                else:
+                    self._soft_update_target_network(self.critic_target_network, self.critic_network)
+            if epoch % frequency == 0 and evaluations:
+                res = eval_agent(self, curriculum=self.args.curriculum_learning, separate_goals=separate_goals)
+            log_results(self, epoch, res, evaluations=self.args.evaluations, frequency=self.args.save_freq, store_model=True,
+                        store_stats=False, separate_goals=self.args.separate_goals)
 
     # Update LP probability
     def _update_p(self, epsilon=0.4):
@@ -214,11 +218,12 @@ class SACAgent:
         return [cq.C for cq in self.competence_computers]
 
     # pre_process the inputs
-    def _preproc_inputs(self, obs, g):
+    def _preproc_inputs(self, obs, ag, g):
         obs_norm = self.o_norm.normalize(obs)
         g_norm = self.g_norm.normalize(g)
+        ag_norm = self.g_norm.normalize(ag)
         # concatenate the stuffs
-        inputs = np.concatenate([obs_norm, g_norm])
+        inputs = np.concatenate([obs_norm, ag_norm, g_norm])
         inputs = torch.tensor(inputs, dtype=torch.float32).unsqueeze(0)
         if self.args.cuda:
             inputs = inputs.cuda()
@@ -268,10 +273,10 @@ class SACAgent:
             target_param.data.copy_((1 - self.args.polyak) * param.data + self.args.polyak * target_param.data)
 
     # update the network
-    def _update_network(self):
+    def _update_network(self, head):
         # sample the episodes
         if self.args.multihead_buffer:
-            head = np.random.choice(np.arange(self.num_buckets), 1, p=self.p)[0]
+            # head = np.random.choice(np.arange(self.num_buckets), 1, p=self.p)[0]
             transitions = self.buffer.sample(self.args.batch_size, head)
         else:
             transitions = self.buffer.sample(self.args.batch_size)
@@ -384,7 +389,7 @@ class SACAgent:
                                 input_tensor = torch.tensor(np.concatenate([self.o_norm.normalize(obs),
                                                                             config_z]), dtype=torch.float32).unsqueeze(0)
                             else:
-                                input_tensor = self._preproc_inputs(obs, goal)  # PROCESSING TO CHECK
+                                input_tensor = self._preproc_inputs(obs, ag, goal)  # PROCESSING TO CHECK
                             action = self._select_actions(input_tensor, eval=True)
                         observation_new, _, _, info = self.env.step(action)
                         obs = observation_new['observation']
@@ -425,7 +430,7 @@ class SACAgent:
                                 self.model.forward_pass(obs_tensor, ag_norm, g_norm)
                                 action = self.model.pi_tensor.numpy()
                             else:
-                                input_tensor = self._preproc_inputs(obs, g)  # PROCESSING TO CHECK
+                                input_tensor = self._preproc_inputs(obs, ag, g)  # PROCESSING TO CHECK
                             # action = self._select_actions(input_tensor, eval=True)
                         observation_new, _, _, info = self.env.step(action)
                         obs = observation_new['observation']
@@ -465,7 +470,7 @@ class SACAgent:
                             input_tensor = torch.tensor(np.concatenate([self.o_norm.normalize(obs),
                                                                         z_ag, z_g]), dtype=torch.float32).unsqueeze(0)
                         else:
-                            input_tensor = self._preproc_inputs(obs, g)  # PROCESSING TO CHECK
+                            input_tensor = self._preproc_inputs(obs, ag, g)  # PROCESSING TO CHECK
                         action = self._select_actions(input_tensor, eval=True)
                     observation_new, _, _, info = self.env.step(action)
                     obs = observation_new['observation']

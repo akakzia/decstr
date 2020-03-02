@@ -14,7 +14,11 @@ def get_args():
     parser.add_argument('--n-epochs', type=int, default=2000, help='the number of epochs to train the agent')
     parser.add_argument('--n-cycles', type=int, default=50, help='the times to collect samples per epoch')
     parser.add_argument('--n-batches', type=int, default=40, help='the times to update the network')
-    parser.add_argument('--save-interval', type=int, default=5, help='the interval that save the trajectory')
+
+    parser.add_argument('--evaluations', type=bool, default=True, help='do evaluation at the end of the epoch w/ frequency')
+    parser.add_argument('--separate-goals', type=bool, default=False, help='separate the goals while evaluating')
+    parser.add_argument('--save-freq', type=int, default=10, help='the interval that save the trajectory')
+
     parser.add_argument('--seed', type=int, default=123, help='random seed')
     parser.add_argument('--num-workers', type=int, default=1, help='the number of cpus to collect samples')
     parser.add_argument('--replay-strategy', type=str, default='future', help='the HER strategy')
@@ -46,7 +50,7 @@ def get_args():
     parser.add_argument('--multihead-buffer', type=bool, default=True, help='use a multihead replay buffer in curriculum')
     parser.add_argument('--queue-length', type=int, default=500, help='The window size when computing competence')
 
-    parser.add_argument('--architecture', type=str, default='disentangled', help='The architecture of the networks')
+    parser.add_argument('--architecture', type=str, default='deepsets', help='The architecture of the networks')
 
     parser.add_argument('--fine-tune', type=bool, default=False, help='Do fine tuning over existing model')
     parser.add_argument('--model-path', type=str, default='', help='The source model')

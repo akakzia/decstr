@@ -79,11 +79,11 @@ def update_flat(actor_network, critic_network, critic_target_network, policy_opt
 
 def update_disentangled(actor_network, critic_network, critic_target_network, configuration_network, policy_optim, critic_optim, alpha, log_alpha,
                         target_entropy, alpha_optim, obs_norm, ag_norm, g_norm, obs_next_norm, ag_next_norm, actions, rewards, args):
-    obs_norm_tensor = torch.tensor(obs_norm, dtype=torch.float32).unsqueeze(0)
-    obs_next_norm_tensor = torch.tensor(obs_next_norm, dtype=torch.float32).unsqueeze(0)
-    ag_norm_tensor = torch.tensor(ag_norm, dtype=torch.float32).unsqueeze(0)
-    ag_next_norm_tensor = torch.tensor(ag_next_norm, dtype=torch.float32).unsqueeze(0)
-    g_norm_tensor = torch.tensor(g_norm, dtype=torch.float32).unsqueeze(0)
+    obs_norm_tensor = torch.tensor(obs_norm, dtype=torch.float32)
+    obs_next_norm_tensor = torch.tensor(obs_next_norm, dtype=torch.float32)
+    ag_norm_tensor = torch.tensor(ag_norm, dtype=torch.float32)
+    ag_next_norm_tensor = torch.tensor(ag_next_norm, dtype=torch.float32)
+    g_norm_tensor = torch.tensor(g_norm, dtype=torch.float32)
 
     actions_tensor = torch.tensor(actions, dtype=torch.float32)
     r_tensor = torch.tensor(rewards, dtype=torch.float32).reshape(rewards.shape[0], 1)
@@ -92,7 +92,8 @@ def update_disentangled(actor_network, critic_network, critic_target_network, co
     config_ag_z_next = configuration_network(ag_next_norm_tensor)
     config_g_z = configuration_network(g_norm_tensor)
 
-    inputs_norm_tensor = torch.tensor(np.concatenate([obs_norm, config_ag_z, config_g_z], axis=1), dtype=torch.float32)
+    inputs_norm_tensor = torch.tensor(np.concatenate([obs_norm, config_ag_z.detach(), config_g_z.detach()],
+                                                     axis=-1), dtype=torch.float32)
     inputs_next_norm_tensor = torch.tensor(np.concatenate([obs_next_norm, config_ag_z_next.detach(), config_g_z.detach()], axis=1),
                                            dtype=torch.float32)
     if args.cuda:
@@ -124,7 +125,7 @@ def update_disentangled(actor_network, critic_network, critic_target_network, co
 
     # start to update the network
     policy_optim.zero_grad()
-    policy_loss.backward()
+    policy_loss.backward(retain_graph=True)
     sync_grads(actor_network)
     policy_optim.step()
 
@@ -142,12 +143,12 @@ def update_disentangled(actor_network, critic_network, critic_target_network, co
 def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_entropy, alpha_optim, obs_norm, ag_norm, g_norm, obs_next_norm,
                     ag_next_norm, actions, rewards, args):
 
-    obs_norm_tensor = torch.tensor(obs_norm, dtype=torch.float32).unsqueeze(0)
-    obs_next_norm_tensor = torch.tensor(obs_next_norm, dtype=torch.float32).unsqueeze(0)
-    g_norm_tensor = torch.tensor(g_norm, dtype=torch.float32).unsqueeze(0)
-    ag_norm_tensor = torch.tensor(ag_norm, dtype=torch.float32).unsqueeze(0)
-    ag_next_norm_tensor = torch.tensor(ag_next_norm, dtype=torch.float32).unsqueeze(0)
-    actions_tensor = torch.tensor(actions, dtype=torch.float32).unsqueeze(0)
+    obs_norm_tensor = torch.tensor(obs_norm, dtype=torch.float32)
+    obs_next_norm_tensor = torch.tensor(obs_next_norm, dtype=torch.float32)
+    g_norm_tensor = torch.tensor(g_norm, dtype=torch.float32)
+    ag_norm_tensor = torch.tensor(ag_norm, dtype=torch.float32)
+    ag_next_norm_tensor = torch.tensor(ag_next_norm, dtype=torch.float32)
+    actions_tensor = torch.tensor(actions, dtype=torch.float32)
     r_tensor = torch.tensor(rewards, dtype=torch.float32).reshape(rewards.shape[0], 1)
 
     if args.cuda:
