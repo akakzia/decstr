@@ -185,8 +185,8 @@ class SACAgent:
                     self._soft_update_target_network(self.model.rho_target_critic, self.model.rho_critic)
                 else:
                     self._soft_update_target_network(self.critic_target_network, self.critic_network)
-            if epoch % frequency == 0 and evaluations:
-                res = eval_agent(self, curriculum=self.args.curriculum_learning, separate_goals=separate_goals)
+            if epoch % self.args.save_freq == 0 and self.args.evaluations:
+                res = eval_agent(self, curriculum=self.args.curriculum_learning, separate_goals=self.args.separate_goals)
             log_results(self, epoch, res, evaluations=self.args.evaluations, frequency=self.args.save_freq, store_model=True,
                         store_stats=False, separate_goals=self.args.separate_goals)
 
