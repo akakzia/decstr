@@ -178,7 +178,7 @@ class SACAgent:
                         critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = self._update_network()
                     else:
                         critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = self._update_network_disentangled()"""
-                    critic_loss, policy_loss, ent_loss, alpha = self._update_network(mb_buckets[1])
+                    critic_loss, policy_loss, ent_loss, alpha = self._update_network(mb_buckets[1], epoch)
                 # soft update
                 if self.architecture == 'deepsets':
                     self._soft_update_target_network(self.model.single_phi_target_critic, self.model.single_phi_critic)
@@ -273,10 +273,12 @@ class SACAgent:
             target_param.data.copy_((1 - self.args.polyak) * param.data + self.args.polyak * target_param.data)
 
     # update the network
-    def _update_network(self, head):
+    def _update_network(self, head, e):
         # sample the episodes
         if self.args.multihead_buffer:
-            # head = np.random.choice(np.arange(self.num_buckets), 1, p=self.p)[0]
+            # Starting from the 5th epoch, heads are selected according to p
+            if e > 5:
+                head = np.random.choice(np.arange(self.num_buckets), 1, p=self.p)[0]
             transitions = self.buffer.sample(self.args.batch_size, head)
         else:
             transitions = self.buffer.sample(self.args.batch_size)

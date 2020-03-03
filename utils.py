@@ -127,47 +127,66 @@ def valid(vector):
     return True
 
 
+def one_above_two(vector):
+    """
+    Determines whether one block is above two blocks
+    """
+    if (vector[0] == 1. and vector[0] == vector[2]) or \
+            (vector[1] == 1. and vector[1] == vector[-2]) or (vector[3] == 1. and vector[3] == vector[-1]):
+        return True
+    return False
+
+
 def generate_goals(nb_objects=3, sym=1, asym=1):
     """
     generates all the possible goal configurations whether feasible or not, then regroup them into buckets
     :return:
     """
-    buckets = {0: [], 1: [], 2: [], 3: [], 4: []}
+    buckets = {0: [], 1: [], 2: [], 3: [], 4: [], 5: []}
     size = sym * nb_objects * (nb_objects - 1) // 2 + asym * nb_objects * (nb_objects - 1)
     all_configurations = itertools.product([0., 1.], repeat=size)
-    """for configuration in all_configurations:
-        if sum(configuration) == 0. or (sum(configuration[:3]) == 1. and sum(configuration[-3:]) == 0.):
-            # All far and only one pair is close
-            buckets[0].append(configuration)
-        elif sum(configuration[:3]) > 1 and sum(configuration[-3:]) == 0.:
-            # Two oor three pairs are close
-            buckets[1].append(configuration)
-        elif (configuration[:3] == configuration[-3:] and sum(configuration) == 2.) or \
-                (sum(configuration[:3]) == 3. and sum(configuration[-3:]) == 2.):
-            # Only stacks are close
-            buckets[2].append(configuration)
-        elif (np.array(configuration[:3]) - np.array(configuration[-3:]) != -1.).all():
-            # Other configurations
-            buckets[3].append(configuration)
-        else:
-            # Not feasible
-            buckets[4].append(configuration)"""
-    for configuration in all_configurations:
-        if sum(configuration) == 0. or (sum(configuration[:3]) == 1. and sum(configuration[-6:]) == 0.):
-            # All far and only one pair is close
-            buckets[0].append(configuration)
-        elif sum(configuration[:3]) > 1 and sum(configuration[-6:]) == 0.:
-            # Two or three pairs are close
-            buckets[1].append(configuration)
-        elif configuration[:3] == above_to_close(configuration[-6:]) and sum(configuration) == 2.:
-            # Only stacks are close
-            buckets[2].append(configuration)
-        elif sum(configuration[:3]) == 3. and valid(configuration[-6:]):
-            # Other configurations
-            buckets[3].append(configuration)
-        else:
-            # Not feasible
-            buckets[4].append(configuration)
+    if asym < 1:
+        for configuration in all_configurations:
+            if sum(configuration) == 0. or (sum(configuration[:3]) == 1. and sum(configuration[-3:]) == 0.):
+                # All far and only one pair is close
+                buckets[0].append(configuration)
+            elif sum(configuration[:3]) > 1 and sum(configuration[-3:]) == 0.:
+                # Two oor three pairs are close
+                buckets[1].append(configuration)
+            elif (configuration[:3] == configuration[-3:] and sum(configuration) == 2.) or \
+                    (sum(configuration[:3]) == 3. and sum(configuration[-3:]) == 2.):
+                # Only stacks are close
+                buckets[2].append(configuration)
+            elif (np.array(configuration[:3]) - np.array(configuration[-3:]) != -1.).all():
+                # Other configurations
+                buckets[3].append(configuration)
+            else:
+                # Not feasible
+                buckets[4].append(configuration)
+    else:
+        for configuration in all_configurations:
+            if not valid(configuration[-6:]):
+                # Not feasible having more than 5 ones | Not feasible that two blocks are above a single block
+                buckets[5].append(configuration)
+            elif sum(configuration[:3]) <= 1. and sum(configuration[-6:]) == 0.:
+                # All far and only one pair is close
+                buckets[0].append(configuration)
+            elif sum(configuration[:3]) > 1 and sum(configuration[-6:]) == 0.:
+                # Two or three pairs are close
+                buckets[1].append(configuration)
+            elif min(np.array(configuration[:3]) - np.array(above_to_close(configuration[-6:]))) == 0.0 and sum(configuration[-6:]) == 1.:
+                # Only stacks are close
+                buckets[2].append(configuration)
+            elif one_above_two(configuration[-6:]) and sum(configuration) == 5.:
+                # Other configurations
+                buckets[3].append(configuration)
+            elif min(np.array(configuration[:3]) - np.array(above_to_close(configuration[-6:]))) == 0.0 and \
+                    not one_above_two(configuration[-6:]) and sum(configuration) == 4.:
+                # Other configurations
+                buckets[4].append(configuration)
+            else:
+                # Not feasible
+                buckets[5].append(configuration)
     return buckets
 
 

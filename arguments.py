@@ -11,9 +11,9 @@ def get_args():
     # the environment setting
     parser.add_argument('--env-name', type=str, default='FetchManipulate3Objects-v0', help='the environment name')
     parser.add_argument('--agent', type=str, default='SAC', help='the agent name')
-    parser.add_argument('--n-epochs', type=int, default=1, help='the number of epochs to train the agent')
-    parser.add_argument('--n-cycles', type=int, default=1, help='the times to collect samples per epoch')
-    parser.add_argument('--n-batches', type=int, default=1, help='the times to update the network')
+    parser.add_argument('--n-epochs', type=int, default=2000, help='the number of epochs to train the agent')
+    parser.add_argument('--n-cycles', type=int, default=50, help='the times to collect samples per epoch')
+    parser.add_argument('--n-batches', type=int, default=40, help='the times to update the network')
 
     parser.add_argument('--evaluations', type=bool, default=True, help='do evaluation at the end of the epoch w/ frequency')
     parser.add_argument('--separate-goals', type=bool, default=False, help='separate the goals while evaluating')
