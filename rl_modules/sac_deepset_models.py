@@ -38,15 +38,15 @@ class SinglePhiActor(nn.Module):
     def __init__(self, inp, hid, out):
         super(SinglePhiActor, self).__init__()
         self.linear1 = nn.Linear(inp, hid)
-        self.linear2 = nn.Linear(hid, hid)
-        self.linear3 = nn.Linear(hid, out)
+        self.linear2 = nn.Linear(hid, out)
+        #self.linear3 = nn.Linear(hid, out)
 
         self.apply(weights_init_)
 
     def forward(self, inp):
         x = self.linear1(inp)
-        x = self.linear2(x)
-        x = F.relu(self.linear3(x))
+        x = torch.tanh(self.linear2(x))
+        #x = torch.tanh(self.linear3(x))
 
         return x
 
@@ -54,8 +54,10 @@ class SinglePhiActor(nn.Module):
 class RhoActor(nn.Module):
     def __init__(self, inp, out, action_space=None):
         super(RhoActor, self).__init__()
-        self.mean_linear = nn.Linear(inp, out)
-        self.log_std_linear = nn.Linear(inp, out)
+        self.linear1 = nn.Linear(inp, 256)
+        self.linear2 = nn.Linear(256, 256)
+        self.mean_linear = nn.Linear(256, out)
+        self.log_std_linear = nn.Linear(256, out)
 
         self.apply(weights_init_)
 
@@ -67,8 +69,10 @@ class RhoActor(nn.Module):
             self.action_scale = torch.FloatTensor((action_space.high - action_space.low) / 2.)
             self.action_bias = torch.FloatTensor((action_space.high + action_space.low) / 2.)
 
-    def forward(self, inp):
-        x = torch.tanh(inp)
+    def forward(self, x):
+        #x = torch.tanh(inp)
+        x = F.relu(self.linear1(x))
+        x = F.relu(self.linear2(x))
 
         mean = self.mean_linear(x)
         log_std = self.log_std_linear(x)
@@ -92,24 +96,24 @@ class RhoActor(nn.Module):
 class SinglePhiCritic(nn.Module):
     def __init__(self, inp, hid, out):
         super(SinglePhiCritic, self).__init__()
-        self.linear1 = nn.Linear(inp, hid)
-        self.linear2 = nn.Linear(hid, hid)
-        self.linear3 = nn.Linear(hid, out)
+        self.linear1 = nn.Linear(inp, out)
+        #self.linear2 = nn.Linear(hid, hid)
+        #self.linear3 = nn.Linear(hid, out)
 
-        self.linear4 = nn.Linear(inp, hid)
-        self.linear5 = nn.Linear(hid, hid)
-        self.linear6 = nn.Linear(hid, out)
+        self.linear4 = nn.Linear(inp, out)
+        #self.linear5 = nn.Linear(hid, hid)
+        #self.linear6 = nn.Linear(hid, out)
 
         self.apply(weights_init_)
 
     def forward(self, inp):
-        x1 = self.linear1(inp)
-        x1 = self.linear2(x1)
-        x1 = F.relu(self.linear3(x1))
+        x1 = torch.tanh(self.linear1(inp))
+        #x1 = self.linear2(x1)
+        #x1 = F.relu(self.linear3(x1))
 
-        x2 = self.linear4(inp)
-        x2 = self.linear5(x2)
-        x2 = F.relu(self.linear6(x2))
+        x2 = torch.tanh(self.linear4(inp))
+        #x2 = self.linear5(x2)
+        #x2 = F.relu(self.linear6(x2))
 
         return x1, x2
 
@@ -117,16 +121,26 @@ class SinglePhiCritic(nn.Module):
 class RhoCritic(nn.Module):
     def __init__(self, inp, out, action_space=None):
         super(RhoCritic, self).__init__()
-        self.linear1 = nn.Linear(inp, out)  # Added one layer (To Check)
+        self.linear1 = nn.Linear(inp, 256)  # Added one layer (To Check)
+        self.linear2 = nn.Linear(256, 256)
+        self.linear3 = nn.Linear(256, out)
 
-        self.linear2 = nn.Linear(inp, out)
+        self.linear4 = nn.Linear(inp, 256)
+        self.linear5 = nn.Linear(256, 256)
+        self.linear6 = nn.Linear(256, out)
 
         self.apply(weights_init_)
 
     def forward(self, inp1, inp2):
-        x1 = torch.tanh(self.linear1(inp1))
+        #x1 = torch.tanh(self.linear1(inp1))
+        x1 = self.linear1(inp1)
+        x1 = self.linear2(x1)
+        x1 = F.relu(self.linear3(x1))
 
-        x2 = torch.tanh(self.linear2(inp2))
+        #x2 = torch.tanh(self.linear2(inp2))
+        x2 = self.linear4(inp2)
+        x2 = self.linear5(x2)
+        x2 = F.relu(self.linear6(x2))
 
         return x1, x2
 
@@ -171,6 +185,9 @@ class DeepSetSAC:
         self.g = g
 
         obs_body = self.observation.narrow(-1, start=0, length=self.dim_body)
+        obs_objects = [torch.cat((torch.cat(obs_body.shape[0] * [self.one_hot_encodings[i]]).reshape(obs_body.shape[0], self.num_blocks),
+                                  self.observation.narrow(-1, start=self.dim_object*i + self.dim_body, length=self.dim_object)),
+                                 dim=-1) for i in range(self.num_blocks)]
 
         input_objects = []
 
@@ -181,12 +198,35 @@ class DeepSetSAC:
         output_attention = self.attention(input_attention)
 
         # Process the shapes of the one hot encoding tensors according to input batch
-        proc_one_hot = []
+        """proc_one_hot = []
         for i in range(self.num_blocks):
-            proc_one_hot.append(torch.cat(obs_body.shape[0] * [self.one_hot_encodings[i]]).reshape(obs_body.shape[0], self.num_blocks))
+            proc_one_hot.append(torch.cat(obs_body.shape[0] * [self.one_hot_encodings[i]]).reshape(obs_body.shape[0], self.num_blocks))"""
 
         # Actor part
-        for i, j in permutations(torch.arange(self.num_blocks).numpy(), 2):
+        combinations_tensor = torch.stack([torch.cat(x).reshape(obs_body.shape[0], 36) for x in permutations(obs_objects, 2)], dim=0)
+        attention_tensor = output_attention.repeat(combinations_tensor.shape[0], 1, 2)
+        attended_combinations_tensor = combinations_tensor * attention_tensor
+        obs_body_repeated = obs_body.repeat(combinations_tensor.shape[0], 1, 1)
+        body_att_objects = torch.cat((obs_body_repeated, attended_combinations_tensor), dim=-1)
+        output_phi_actor = self.single_phi_actor(body_att_objects)
+        output_phi_actor = output_phi_actor.sum(dim=0)
+        self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
+        # Critic part
+        repeat_pi = self.pi_tensor.repeat(combinations_tensor.shape[0], 1, 1)
+        body_att_objects_actions = torch.cat((body_att_objects, repeat_pi), dim=-1)
+        with torch.no_grad():
+            output_phi_target_critic1, output_phi_target_critic2 = self.single_phi_target_critic(body_att_objects_actions)
+            output_phi_target_critic1 = output_phi_target_critic1.sum(dim=0)
+            output_phi_target_critic2 = output_phi_target_critic2.sum(dim=0)
+        output_phi_critic1, output_phi_critic2 = self.single_phi_critic(body_att_objects_actions)
+        output_phi_critic1 = output_phi_critic1.sum(dim=0)
+        output_phi_critic2 = output_phi_critic2.sum(dim=0)
+        with torch.no_grad():
+            self.target_q1_pi_tensor,  self.target_q2_pi_tensor = self.rho_target_critic(output_phi_target_critic1, output_phi_target_critic2)
+        self.q1_pi_tensor, self.q2_pi_tensor = self.rho_critic(output_phi_critic1, output_phi_critic2)
+
+        """print('dz')
+        for i, j in combinations(torch.arange(self.num_blocks).numpy(), 2):
             # Get each object features
             obs_object_i = self.observation.narrow(-1, start=int(self.dim_object*i + self.dim_body), length=int(self.dim_object))
             obs_object_j = self.observation.narrow(-1, start=int(self.dim_object*j + self.dim_body), length=int(self.dim_object))
@@ -208,7 +248,8 @@ class DeepSetSAC:
 
             body_object_pairs_list.append(body_objects_input)
 
-        input_pi = torch.stack(input_objects).sum(dim=0).sum(dim=0)
+        #input_pi = torch.stack(input_objects).sum(dim=0).sum(dim=0)
+        input_pi = sum(input_objects)
         self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(input_pi)
 
         input_objects_action_list_1 = []
@@ -220,9 +261,9 @@ class DeepSetSAC:
         input_objects_action_list_target_2 = []
 
         # Critic part
-        pi = self.pi_tensor.unsqueeze(0).repeat(obs_body.shape[0], 1)
+        #pi = self.pi_tensor.unsqueeze(0).repeat(obs_body.shape[0], 1)
         for body_objects_input in body_object_pairs_list:
-            body_objects_action_input = torch.cat((body_objects_input, pi), dim=-1)
+            body_objects_action_input = torch.cat((body_objects_input, self.pi_tensor), dim=-1)
 
             with torch.no_grad():
                 input_target_phi_1, input_target_phi_2 = self.single_phi_target_critic(body_objects_action_input)
@@ -237,14 +278,18 @@ class DeepSetSAC:
 
             input_objects_action_list_target_2.append(input_target_phi_2)
 
-        input_critic_1 = torch.stack(input_objects_action_list_1).sum(dim=0).sum(dim=0)
-        input_critic_2 = torch.stack(input_objects_action_list_2).sum(dim=0).sum(dim=0)
-        input_target_critic_1 = torch.stack(input_objects_action_list_target_1).sum(dim=0).sum(dim=0)
-        input_target_critic_2 = torch.stack(input_objects_action_list_target_2).sum(dim=0).sum(dim=0)
+        #input_critic_1 = torch.stack(input_objects_action_list_1).sum(dim=0).sum(dim=0)
+        #input_critic_2 = torch.stack(input_objects_action_list_2).sum(dim=0).sum(dim=0)
+        #input_target_critic_1 = torch.stack(input_objects_action_list_target_1).sum(dim=0).sum(dim=0)
+        #input_target_critic_2 = torch.stack(input_objects_action_list_target_2).sum(dim=0).sum(dim=0)
+        input_critic_1 = sum(input_objects_action_list_1)
+        input_critic_2 = sum(input_objects_action_list_2)
+        input_target_critic_1 = sum(input_objects_action_list_target_1)
+        input_target_critic_2 = sum(input_objects_action_list_target_2)
         self.q1_pi_tensor, self.q2_pi_tensor = self.rho_critic(input_critic_1, input_critic_2)
 
         with torch.no_grad():
-            self.target_q1_pi_tensor,  self.target_q2_pi_tensor = self.rho_target_critic(input_target_critic_1, input_target_critic_2)
+            self.target_q1_pi_tensor,  self.target_q2_pi_tensor = self.rho_target_critic(input_target_critic_1, input_target_critic_2)"""
 
     def forward_with_actions(self, obs, actions, ag, g):
         self.observation = obs
@@ -252,6 +297,9 @@ class DeepSetSAC:
         self.g = g
 
         obs_body = self.observation.narrow(-1, start=0, length=self.dim_body)
+        obs_objects = [torch.cat((torch.cat(obs_body.shape[0] * [self.one_hot_encodings[i]]).reshape(obs_body.shape[0], self.num_blocks),
+                                  self.observation.narrow(-1, start=self.dim_object * i + self.dim_body, length=self.dim_object)),
+                                 dim=-1) for i in range(self.num_blocks)]
 
         # Pass through the attention network
         input_attention = torch.cat((self.ag, self.g), dim=-1)
@@ -262,11 +310,25 @@ class DeepSetSAC:
         input_objects_action_list_2 = []
 
         proc_one_hot = []
-        for i in range(self.num_blocks):
-            proc_one_hot.append(torch.cat(obs_body.shape[0] * [self.one_hot_encodings[i]]).reshape(obs_body.shape[0], self.num_blocks))
+
+        combinations_tensor = torch.stack([torch.cat(x).reshape(obs_body.shape[0], 36) for x in permutations(obs_objects, 2)], dim=0)
+        attention_tensor = output_attention.repeat(combinations_tensor.shape[0], 1, 2)
+        attended_combinations_tensor = combinations_tensor * attention_tensor
+        obs_body_repeated = obs_body.repeat(combinations_tensor.shape[0], 1, 1)
+        body_att_objects = torch.cat((obs_body_repeated, attended_combinations_tensor), dim=-1)
+        # Critic part
+        repeat_actions = actions.repeat(combinations_tensor.shape[0], 1, 1)
+        body_att_objects_actions = torch.cat((body_att_objects, repeat_actions), dim=-1)
+        output_phi_critic1, output_phi_critic2 = self.single_phi_critic(body_att_objects_actions)
+        output_phi_critic1 = output_phi_critic1.sum(dim=0)
+        output_phi_critic2 = output_phi_critic2.sum(dim=0)
+        q1_pi_tensor, q2_pi_tensor = self.rho_critic(output_phi_critic1, output_phi_critic2)
+
+        """for i in range(self.num_blocks):
+            proc_one_hot.append(torch.cat(obs_body.shape[0] * [self.one_hot_encodings[i]]).reshape(obs_body.shape[0], self.num_blocks))"""
 
         # Critic part
-        for i, j in permutations(torch.arange(self.num_blocks).numpy(), 2):
+        """for i, j in combinations(torch.arange(self.num_blocks).numpy(), 2):
             # Get each object features
             obs_object_i = self.observation.narrow(-1, start=int(self.dim_object * i + self.dim_body), length=int(self.dim_object))
             obs_object_j = self.observation.narrow(-1, start=int(self.dim_object * j + self.dim_body), length=int(self.dim_object))
@@ -290,6 +352,6 @@ class DeepSetSAC:
 
         input_critic_1 = torch.stack(input_objects_action_list_1).sum(dim=0)
         input_critic_2 = torch.stack(input_objects_action_list_2).sum(dim=0)
-        q1_pi_tensor, q2_pi_tensor = self.rho_critic(input_critic_1, input_critic_2)
+        q1_pi_tensor, q2_pi_tensor = self.rho_critic(input_critic_1, input_critic_2)"""
 
         return q1_pi_tensor, q2_pi_tensor

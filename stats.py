@@ -21,4 +21,4 @@ def save_plot(stats):
     plt.grid()
     plt.legend(['Bucket {}'.format(i) for i in range(num_buckets)], fancybox=True, shadow=True, loc='lower center',
                bbox_to_anchor=(0.5, -0.25), ncol=5)
-    plt.savefig('stats.png')
+    plt.savefig('stats_deepsets04.png')

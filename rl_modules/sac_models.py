@@ -108,8 +108,6 @@ class ConfigNetwork(nn.Module):
         self.apply(weights_init_)
 
     def forward(self, configuration):
-        #xu = torch.cat([ag_configuration, desired_configuration], 1)
-
         x1 = torch.tanh(self.linear1(configuration))
         x1 = torch.tanh(self.linear2(x1))
         x1 = self.linear3(x1)

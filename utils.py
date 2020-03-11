@@ -3,6 +3,7 @@ import torch
 import itertools
 import os
 import json
+from mpi4py import MPI
 
 
 def rollout(env, env_params, agent, args, goals, animated=False):
@@ -42,22 +43,22 @@ def rollout(env, env_params, agent, args, goals, animated=False):
     g = observation['desired_goal']
     # start to collect samples
     for t in range(env_params['max_timesteps']):
-        g_norm = torch.tensor(agent.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
-        ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
         with torch.no_grad():
+            g_norm = torch.tensor(agent.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
+            ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
             if agent.architecture == 'deepsets':
                 obs_tensor = torch.tensor(agent.o_norm.normalize(obs), dtype=torch.float32).unsqueeze(0)
                 agent.model.forward_pass(obs_tensor, ag_norm, g_norm)
-                action = agent.model.pi_tensor.numpy()
+                action = agent.model.pi_tensor.numpy()[0]
             elif agent.architecture == 'disentangled':
                 z_ag = agent.configuration_network(ag_norm)[0]
                 z_g = agent.configuration_network(g_norm)[0]
                 input_tensor = torch.tensor(np.concatenate([agent.o_norm.normalize(obs), z_ag, z_g]),
                                             dtype=torch.float32).unsqueeze(0)
-                action = agent._select_actions(input_tensor, eval=True)
+                action = agent._select_actions(input_tensor, eval=eval)
             else:
                 input_tensor = agent._preproc_inputs(obs, ag, g)  # PROCESSING TO CHECK
-                action = agent._select_actions(input_tensor, eval=True)
+                action = agent._select_actions(input_tensor, eval=eval)
         # feed the actions into the environment
         if animated:
             env.render()
@@ -142,10 +143,9 @@ def generate_goals(nb_objects=3, sym=1, asym=1):
     generates all the possible goal configurations whether feasible or not, then regroup them into buckets
     :return:
     """
-    buckets = {0: [], 1: [], 2: [], 3: [], 4: [], 5: []}
     size = sym * nb_objects * (nb_objects - 1) // 2 + asym * nb_objects * (nb_objects - 1)
     all_configurations = itertools.product([0., 1.], repeat=size)
-    if asym < 1:
+    """if asym < 1:
         for configuration in all_configurations:
             if sum(configuration) == 0. or (sum(configuration[:3]) == 1. and sum(configuration[-3:]) == 0.):
                 # All far and only one pair is close
@@ -186,7 +186,34 @@ def generate_goals(nb_objects=3, sym=1, asym=1):
                 buckets[4].append(configuration)
             else:
                 # Not feasible
-                buckets[5].append(configuration)
+                buckets[5].append(configuration)"""
+    if asym < 1:
+        buckets = {0: [], 1: [], 2: []}
+        for configuration in all_configurations:
+            if sum(configuration) < 2.:
+                buckets[0].append(configuration)
+            elif sum(configuration) == 2.:
+                buckets[1].append(configuration)
+            else:
+                buckets[2].append(configuration)
+    else:
+        buckets = {0: [], 1: [], 2: [], 3: [], 4: []}
+        for configuration in all_configurations:
+            if sum(configuration) == 0. or (sum(configuration[:3]) == 1. and sum(configuration[-6:]) == 0.):
+                # All far and only one pair is close
+                buckets[0].append(configuration)
+            elif sum(configuration[:3]) > 1 and sum(configuration[-6:]) == 0.:
+                # Two or three pairs are close
+                buckets[1].append(configuration)
+            elif configuration[:3] == above_to_close(configuration[-6:]) and sum(configuration) == 2.:
+                # Only stacks are close
+                buckets[2].append(configuration)
+            elif sum(configuration[:3]) == 3. and valid(configuration[-6:]):
+                # Other configurations
+                buckets[3].append(configuration)
+            else:
+                # Not feasible
+                buckets[4].append(configuration)
     return buckets
 
 
@@ -206,3 +233,7 @@ def init_storage(args):
     with open(os.path.join(model_path, 'config.json'), 'w') as f:
         json.dump(vars(args), f, indent=2)
     return model_path, eval_path
+
+
+def initDemoBuffer(buffer, path):
+    raise NotImplementedError

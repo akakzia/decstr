@@ -37,8 +37,11 @@ def process_inputs(o, g, o_mean, o_std, g_mean, g_std, args):
 if __name__ == '__main__':
     args = get_args()
     # load the model param
-    model_path = args.save_dir + args.env_name + '_Curriculum__Attempt00_curr_buckets_5' + '/model_1920.pt'
-    o_mean, o_std, g_mean, g_std, model, _, config = torch.load(model_path, map_location=lambda storage, loc: storage)
+    model_path = args.save_dir + args.env_name + '_Curriculum__deepsets02' + '/model_90.pt'
+    if args.architecture == 'deepsets':
+        o_mean, o_std, g_mean, g_std, phi_a, phi_c, rho_a, rho_c, att = torch.load(model_path, map_location=lambda storage, loc: storage)
+    else:
+        o_mean, o_std, g_mean, g_std, model, _, config = torch.load(model_path, map_location=lambda storage, loc: storage)
     # create the environment
     env = gym.make(args.env_name)
     # get the env param
@@ -53,14 +56,21 @@ if __name__ == '__main__':
     # create the actor network
     agent = SACAgent(args, env, env_params)
     # actor_network = actor(env_params)
-    agent.actor_network.load_state_dict(model)
-    agent.actor_network.eval()
-    if architecture01:
+    if args.architecture == 'deepsets':
+        agent.model.single_phi_actor.load_state_dict(phi_a)
+        agent.model.single_phi_critic.load_state_dict(phi_c)
+        agent.model.rho_actor.load_state_dict(rho_a)
+        agent.model.rho_critic.load_state_dict(rho_c)
+        agent.model.attention.load_state_dict(att)
+    else:
+        agent.actor_network.load_state_dict(model)
+        agent.actor_network.eval()
         agent.configuration_network.load_state_dict(config)
+
     s = 0
-    buckets = generate_goals(nb_objects=3, sym=1, asym=1)
+    buckets = generate_goals(nb_objects=3, sym=1, asym=0)
     for i in range(args.demo_length):
-        goal = buckets[2][np.random.choice(len(buckets[2]))]
+        goal = buckets[0][np.random.choice(len(buckets[0]))]
         observation = env.reset_goal(np.array(goal))
         # start to do the demo
         obs = observation['observation']
@@ -68,19 +78,22 @@ if __name__ == '__main__':
         ag = observation['achieved_goal']
         for t in range(env._max_episode_steps):
             env.render()
-            if architecture01:
+            with torch.no_grad():
                 g_norm = torch.tensor(normalize_goal(g, g_mean, g_std, args), dtype=torch.float32).unsqueeze(0)
                 ag_norm = torch.tensor(normalize_goal(ag, g_mean, g_std, args), dtype=torch.float32).unsqueeze(0)
-                # config_inputs = np.concatenate([ag, g])
-                # config_inputs = torch.tensor(config_inputs, dtype=torch.float32).unsqueeze(0)
-                # config_z = agent.configuration_network(ag_norm, g_norm)[0]
-                z_ag = agent.configuration_network(ag_norm)[0]
-                z_g = agent.configuration_network(g_norm)[0]
-                inputs = torch.tensor(np.concatenate([normalize(obs, o_mean, o_std, args), z_ag.detach(), z_g.detach()]),
-                                      dtype=torch.float32).unsqueeze(0)
-            else:
-                inputs = process_inputs(obs, g, o_mean, o_std, g_mean, g_std, args)
-            action = agent._select_actions(inputs, eval=True)
+                if agent.architecture == 'deepsets':
+                    obs_tensor = torch.tensor(normalize(obs, o_mean, o_std, args), dtype=torch.float32).unsqueeze(0)
+                    agent.model.forward_pass(obs_tensor, ag_norm, g_norm)
+                    action = agent.model.pi_tensor.numpy()[0]
+                elif agent.architecture == 'disentangled':
+                    z_ag = agent.configuration_network(ag_norm)[0]
+                    z_g = agent.configuration_network(g_norm)[0]
+                    input_tensor = torch.tensor(np.concatenate([normalize(obs, o_mean, o_std, args), z_ag, z_g]),
+                                                dtype=torch.float32).unsqueeze(0)
+                    action = agent._select_actions(input_tensor, eval=True)
+                else:
+                    input_tensor = agent._preproc_inputs(obs, ag, g)  # PROCESSING TO CHECK
+                    action = agent._select_actions(input_tensor, eval=True)
             # put actions into the environment
             observation_new, reward, _, info = env.step(action)
             if info['is_success']:

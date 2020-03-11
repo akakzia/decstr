@@ -25,7 +25,7 @@ def get_args():
     parser.add_argument('--clip-return', type=float, default=50, help='if clip the returns')
     parser.add_argument('--save-dir', type=str, default='ignoramus/',
                         help='the path to save the models')
-    parser.add_argument('--folder-prefix', type=str, default='_deepsets00', help='to discriminate the model')
+    parser.add_argument('--folder-prefix', type=str, default='_deepsets02', help='to discriminate the model')
 
     parser.add_argument('--noise-eps', type=float, default=0.2, help='noise eps')
     parser.add_argument('--random-eps', type=float, default=0.3, help='random eps')
@@ -46,16 +46,23 @@ def get_args():
     # Curriculum learning arguments
     parser.add_argument('--curriculum-learning', type=bool, default=True, help='Use LP-based curriculum learning')
     parser.add_argument('--curriculum-eps', type=float, default=0.3, help='Prob of sampling random goal in curriculum')
-    parser.add_argument('--curriculum-nu', type=float, default=1, help='Prob of sampling random goal in curriculum')
+    parser.add_argument('--curriculum-nu', type=float, default=0.6, help='Prob of sampling random goal in curriculum')
     parser.add_argument('--multihead-buffer', type=bool, default=True, help='use a multihead replay buffer in curriculum')
     parser.add_argument('--queue-length', type=int, default=500, help='The window size when computing competence')
 
     parser.add_argument('--architecture', type=str, default='deepsets', help='The architecture of the networks')
 
+    # Demonstrations
+    parser.add_argument('--use-demos', type=bool, default=False, help='Use demonstrations and a second behavioral cloning loss')
+    parser.add_argument('--lambda1', type=float, default=0.001, help='Coefficient of the policy loss when using demonstrations')
+    parser.add_argument('--lambda2', type=float, default=0.0078, help='Coefficient of the behavioral cloning closs')
+    parser.add_argument('--l2-reg-coeff', type=float, default=0.005, help='Regularization coefficient')
+    parser.add_argument('--demos-path', type=str, default='demos/demos.pkl', help='The source model')
+
     parser.add_argument('--fine-tune', type=bool, default=False, help='Do fine tuning over existing model')
     parser.add_argument('--model-path', type=str, default='', help='The source model')
 
-    parser.add_argument('--n-test-rollouts', type=int, default=5, help='the number of tests')
+    parser.add_argument('--n-test-rollouts', type=int, default=1, help='the number of tests')
     parser.add_argument('--clip-range', type=float, default=5, help='the clip range')
     parser.add_argument('--demo-length', type=int, default=20, help='the demo length')
     parser.add_argument('--cuda', action='store_true', help='if use gpu do the acceleration')

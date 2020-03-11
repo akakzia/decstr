@@ -20,13 +20,13 @@ def eval_agent(agent, curriculum=False, separate_goals=False):
                 g = observation['desired_goal']
                 ag = observation['achieved_goal']
                 for _ in range(agent.env_params['max_timesteps']):
-                    g_norm = torch.tensor(agent.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
-                    ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
                     with torch.no_grad():
+                        g_norm = torch.tensor(agent.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
+                        ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
                         if agent.architecture == 'deepsets':
                             obs_tensor = torch.tensor(agent.o_norm.normalize(obs), dtype=torch.float32).unsqueeze(0)
                             agent.model.forward_pass(obs_tensor, ag_norm, g_norm)
-                            action = agent.model.pi_tensor.numpy()
+                            action = agent.model.pi_tensor.numpy()[0]
                         elif agent.architecture == 'disentangled':
                             z_ag = agent.configuration_network(ag_norm)[0]
                             z_g = agent.configuration_network(g_norm)[0]
