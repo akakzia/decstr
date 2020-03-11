@@ -37,7 +37,7 @@ def rollout(env, env_params, agent, args, goals, animated=False):
     else:
         # goal = goals[np.random.choice(len(goals), 1)][0]
         pass
-    observation = env.reset_goal(np.array(goal))
+    observation = env.unwrapped.reset_goal(np.array(goal))
     obs = observation['observation']
     ag = observation['achieved_goal']
     g = observation['desired_goal']

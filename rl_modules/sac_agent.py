@@ -84,18 +84,23 @@ class SACAgent:
             sync_networks(self.model.rho_critic)
             sync_networks(self.model.single_phi_actor)
             sync_networks(self.model.single_phi_critic)
-            sync_networks(self.model.attention)
+            sync_networks(self.model.attention_actor)
+            sync_networks(self.model.attention_critic)
 
             hard_update(self.model.single_phi_target_critic, self.model.single_phi_critic)
             hard_update(self.model.rho_target_critic, self.model.rho_critic)
             sync_networks(self.model.single_phi_target_critic)
             sync_networks(self.model.rho_target_critic)
             # create the optimizer
-            self.policy_optim = torch.optim.Adam(list(self.model.single_phi_actor.parameters()) + list(self.model.rho_actor.parameters()),
+            self.policy_optim = torch.optim.Adam(list(self.model.single_phi_actor.parameters()) +
+                                                 list(self.model.rho_actor.parameters()) +
+                                                 list(self.model.attention_actor.parameters()),
                                                  lr=self.args.lr_actor)
-            self.critic_optim = torch.optim.Adam(list(self.model.single_phi_critic.parameters()) + list(self.model.rho_critic.parameters()),
+            self.critic_optim = torch.optim.Adam(list(self.model.single_phi_critic.parameters()) +
+                                                 list(self.model.rho_critic.parameters()) +
+                                                 list(self.model.attention_critic.parameters()),
                                                  lr=self.args.lr_critic)
-            self.attention_optim = torch.optim.Adam(self.model.attention.parameters(), lr=self.args.lr_critic)
+            # self.attention_optim = torch.optim.Adam(self.model.attention.parameters(), lr=self.args.lr_critic)
         else:
             raise NotImplementedError
 
@@ -337,7 +342,7 @@ class SACAgent:
                                                                                    actions, rewards, self.args)
         elif self.architecture == 'deepsets':
             critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs = update_deepsets(self.model, self.policy_optim, self.critic_optim,
-                                                                               self.attention_optim, self.alpha, self.log_alpha, self.target_entropy,
+                                                                               self.alpha, self.log_alpha, self.target_entropy,
                                                                                self.alpha_optim, obs_norm, ag_norm, g_norm, obs_next_norm,
                                                                                ag_next_norm, actions, rewards, self.args)
         else:

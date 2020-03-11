@@ -155,7 +155,7 @@ def update_disentangled(actor_network, critic_network, critic_target_network, co
     return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
 
 
-def update_deepsets(model, policy_optim, critic_optim, attention_optim, alpha, log_alpha, target_entropy, alpha_optim, obs_norm, ag_norm, g_norm,
+def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_entropy, alpha_optim, obs_norm, ag_norm, g_norm,
                     obs_next_norm, ag_next_norm, actions, rewards, args):
 
     obs_norm_tensor = torch.tensor(obs_norm, dtype=torch.float32)
@@ -183,7 +183,7 @@ def update_deepsets(model, policy_optim, critic_optim, attention_optim, alpha, l
         next_q_value = r_tensor + args.gamma * min_qf_next_target
 
     # the q loss
-    qf1, qf2 = model.forward_with_actions(obs_norm_tensor, actions_tensor, ag_norm_tensor, g_norm_tensor)
+    qf1, qf2 = model.forward_with_actions(obs_norm_tensor, ag_norm_tensor, g_norm_tensor, actions_tensor)
     qf1_loss = F.mse_loss(qf1, next_q_value)
     qf2_loss = F.mse_loss(qf2, next_q_value)
     # qf_loss = qf1_loss + qf2_loss
@@ -198,12 +198,13 @@ def update_deepsets(model, policy_optim, critic_optim, attention_optim, alpha, l
     # start to update the network
     policy_optim.zero_grad()
     policy_loss.backward()
+    sync_grads(model.attention_actor)
     sync_grads(model.single_phi_actor)
     sync_grads(model.rho_actor)
     policy_optim.step()
 
     # update the critic_network
-    attention_optim.zero_grad()
+    # attention_optim.zero_grad()
     critic_optim.zero_grad()
     qf1_loss.backward(retain_graph=True)
     sync_grads(model.single_phi_critic)
@@ -212,12 +213,10 @@ def update_deepsets(model, policy_optim, critic_optim, attention_optim, alpha, l
 
     critic_optim.zero_grad()
     qf2_loss.backward()
+    sync_grads(model.attention_critic)
     sync_grads(model.single_phi_critic)
     sync_grads(model.rho_critic)
     critic_optim.step()
-
-    attention_optim.step()
-    sync_grads(model.attention)
 
     alpha_loss, alpha_tlogs = update_entropy(alpha, log_alpha, target_entropy, log_pi, alpha_optim, args)
 
