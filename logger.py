@@ -41,11 +41,24 @@ def log_results(agent, epoch, res, evaluations=True, frequency=10, store_model=T
                             agent.configuration_network.state_dict()],
                            agent.model_path + '/model_{}.pt'.format(epoch))
             elif agent.args.architecture == 'deepsets':
-                torch.save([agent.o_norm.mean, agent.o_norm.std, agent.g_norm.mean, agent.g_norm.std,
-                            agent.model.single_phi_actor.state_dict(), agent.model.single_phi_critic.state_dict(),
-                            agent.model.rho_actor.state_dict(), agent.model.rho_critic.state_dict(),
-                            agent.model.attention.state_dict()],
-                           agent.model_path + '/model_{}.pt'.format(epoch))
+                if agent.args.deepsets_attention and not agent.args.double_critic_attention:
+                    torch.save([agent.o_norm.mean, agent.o_norm.std, agent.g_norm.mean, agent.g_norm.std,
+                                agent.model.single_phi_actor.state_dict(), agent.model.single_phi_critic.state_dict(),
+                                agent.model.rho_actor.state_dict(), agent.model.rho_critic.state_dict(),
+                                agent.model.attention_actor.state_dict(), agent.model.attention_critic_1.state_dict()],
+                               agent.model_path + '/model_{}.pt'.format(epoch))
+                elif agent.args.deepsets_attention and agent.args.double_critic_attention:
+                    torch.save([agent.o_norm.mean, agent.o_norm.std, agent.g_norm.mean, agent.g_norm.std,
+                                agent.model.single_phi_actor.state_dict(), agent.model.single_phi_critic.state_dict(),
+                                agent.model.rho_actor.state_dict(), agent.model.rho_critic.state_dict(),
+                                agent.model.attention_actor.state_dict(), agent.model.attention_critic_1.state_dict(),
+                                agent.model.attention_critic_2.state_dict()],
+                               agent.model_path + '/model_{}.pt'.format(epoch))
+                else:
+                    torch.save([agent.o_norm.mean, agent.o_norm.std, agent.g_norm.mean, agent.g_norm.std,
+                                agent.model.single_phi_actor.state_dict(), agent.model.single_phi_critic.state_dict(),
+                                agent.model.rho_actor.state_dict(), agent.model.rho_critic.state_dict()],
+                               agent.model_path + '/model_{}.pt'.format(epoch))
             else:
                 raise NotImplementedError
         if epoch % frequency == 0 and store_stats:

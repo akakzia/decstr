@@ -21,12 +21,12 @@ class QNetworkFlat(nn.Module):
         super(QNetworkFlat, self).__init__()
 
         # Q1 architecture
-        self.linear1 = nn.Linear(env_params['obs'] + 2*env_params['goal'] + env_params['action'], 256)
+        self.linear1 = nn.Linear(env_params['obs'] + env_params['goal'] + env_params['action'], 256)
         self.linear2 = nn.Linear(256, 256)
         self.linear3 = nn.Linear(256, 1)
 
         # Q2 architecture
-        self.linear4 = nn.Linear(env_params['obs'] + 2*env_params['goal'] + env_params['action'], 256)
+        self.linear4 = nn.Linear(env_params['obs'] + env_params['goal'] + env_params['action'], 256)
         self.linear5 = nn.Linear(256, 256)
         self.linear6 = nn.Linear(256, 1)
 
@@ -50,7 +50,7 @@ class GaussianPolicyFlat(nn.Module):
     def __init__(self, env_params, action_space=None):
         super(GaussianPolicyFlat, self).__init__()
 
-        self.linear1 = nn.Linear(env_params['obs'] + 2 * env_params['goal'], 256)
+        self.linear1 = nn.Linear(env_params['obs'] + env_params['goal'], 256)
         self.linear2 = nn.Linear(256, 256)
 
         self.mean_linear = nn.Linear(256, env_params['action'])

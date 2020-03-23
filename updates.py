@@ -22,9 +22,9 @@ def update_entropy(alpha, log_alpha, target_entropy, log_pi, alpha_optim, args):
 
 
 def update_flat(actor_network, critic_network, critic_target_network, policy_optim, critic_optim, alpha, log_alpha, target_entropy,
-                alpha_optim, obs_norm, ag_norm, g_norm, obs_next_norm, ag_next_norm, actions, rewards, args):
-    inputs_norm = np.concatenate([obs_norm, ag_norm, g_norm], axis=1)
-    inputs_next_norm = np.concatenate([obs_next_norm, ag_next_norm, g_norm], axis=1)
+                alpha_optim, obs_norm, g_norm, obs_next_norm, actions, rewards, args):
+    inputs_norm = np.concatenate([obs_norm, g_norm], axis=1)
+    inputs_next_norm = np.concatenate([obs_next_norm, g_norm], axis=1)
 
     inputs_norm_tensor = torch.tensor(inputs_norm, dtype=torch.float32)
     inputs_next_norm_tensor = torch.tensor(inputs_next_norm, dtype=torch.float32)
@@ -52,7 +52,6 @@ def update_flat(actor_network, critic_network, critic_target_network, policy_opt
     qf1, qf2 = critic_network(inputs_norm_tensor, actions_tensor)
     qf1_loss = F.mse_loss(qf1, next_q_value)
     qf2_loss = F.mse_loss(qf2, next_q_value)
-    qf_loss = qf1_loss + qf2_loss
 
     # the actor loss
     pi, log_pi, _ = actor_network.sample(inputs_norm_tensor)
@@ -68,7 +67,12 @@ def update_flat(actor_network, critic_network, critic_target_network, policy_opt
 
     # update the critic_network
     critic_optim.zero_grad()
-    qf_loss.backward()
+    qf1_loss.backward()
+    sync_grads(critic_network)
+    critic_optim.step()
+
+    critic_optim.zero_grad()
+    qf2_loss.backward()
     sync_grads(critic_network)
     critic_optim.step()
 
@@ -198,7 +202,8 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
     # start to update the network
     policy_optim.zero_grad()
     policy_loss.backward()
-    sync_grads(model.attention_actor)
+    if args.deepsets_attention:
+        sync_grads(model.attention_actor)
     sync_grads(model.single_phi_actor)
     sync_grads(model.rho_actor)
     policy_optim.step()
@@ -206,14 +211,17 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
     # update the critic_network
     # attention_optim.zero_grad()
     critic_optim.zero_grad()
-    qf1_loss.backward(retain_graph=True)
+    qf1_loss.backward()
+    if args.deepsets_attention:
+        sync_grads(model.attention_critic_1)
     sync_grads(model.single_phi_critic)
     sync_grads(model.rho_critic)
     critic_optim.step()
 
     critic_optim.zero_grad()
     qf2_loss.backward()
-    sync_grads(model.attention_critic)
+    if args.deepsets_attention:
+        sync_grads(model.attention_critic_2)
     sync_grads(model.single_phi_critic)
     sync_grads(model.rho_critic)
     critic_optim.step()

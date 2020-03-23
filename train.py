@@ -24,9 +24,7 @@ def get_env_params(env):
 
 
 def launch(args):
-    if args.multi_criteria_her:
-        assert args.env_name == 'FetchManipulate3ObjectsIncremental-v0'
-    # create the ddpg_agent
+    # Make the environment
     env = gym.make(args.env_name)
     # set random seeds for reproduce
     env.seed(args.seed + MPI.COMM_WORLD.Get_rank())
@@ -37,16 +35,8 @@ def launch(args):
         torch.cuda.manual_seed(args.seed + MPI.COMM_WORLD.Get_rank())
     # get the environment parameters
     env_params = get_env_params(env)
-    process = '{}'.format(args.folder_prefix)
-    if args.curriculum_learning:
-        process = 'Curriculum_{}'.format(args.curriculum_eps)
-    # Create save directory
-    """if MPI.COMM_WORLD.Get_rank() == 0:
-        if not os.path.exists(args.save_dir):
-            os.mkdir(os.path.join(args.save_dir))
-        if not os.path.exists(os.path.join(args.save_dir, '{}_{}'.format(args.env_name, process))):
-            os.mkdir(os.path.join(args.save_dir, '{}_{}'.format(args.env_name, process)))"""
-    # create the ddpg agent to interact with the environment
+
+    # create the sac agent to interact with the environment
     if args.agent == "SAC":
         sac_trainer = SACAgent(args, env, env_params)
         sac_trainer.learn()

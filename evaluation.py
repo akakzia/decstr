@@ -25,7 +25,7 @@ def eval_agent(agent, curriculum=False, separate_goals=False):
                         ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
                         if agent.architecture == 'deepsets':
                             obs_tensor = torch.tensor(agent.o_norm.normalize(obs), dtype=torch.float32).unsqueeze(0)
-                            agent.model.forward_pass(obs_tensor, ag_norm, g_norm)
+                            agent.model.forward_pass(obs_tensor, ag_norm, g_norm, eval=True)
                             action = agent.model.pi_tensor.numpy()[0]
                         elif agent.architecture == 'disentangled':
                             z_ag = agent.configuration_network(ag_norm)[0]
@@ -34,7 +34,7 @@ def eval_agent(agent, curriculum=False, separate_goals=False):
                                                         dtype=torch.float32).unsqueeze(0)
                             action = agent._select_actions(input_tensor, eval=True)
                         else:
-                            input_tensor = agent._preproc_inputs(obs, ag, g)  # PROCESSING TO CHECK
+                            input_tensor = agent._preproc_inputs(obs, g)  # PROCESSING TO CHECK
                             action = agent._select_actions(input_tensor, eval=True)
                     observation_new, _, _, info = agent.env.step(action)
                     obs = observation_new['observation']
@@ -50,7 +50,7 @@ def eval_agent(agent, curriculum=False, separate_goals=False):
             res.append(mean)
         agent.overall_stats.append(stats)
         if MPI.COMM_WORLD.Get_rank() == 0:
-            save_plot(np.array(agent.overall_stats))
+            save_plot(np.array(agent.overall_stats), agent.args)
         return res
 
     #

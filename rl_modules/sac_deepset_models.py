@@ -15,6 +15,7 @@ LATENT = 3
 def weights_init_(m):
     if isinstance(m, nn.Linear):
         torch.nn.init.xavier_uniform_(m.weight, gain=1)
+        # torch.nn.init.kaiming_uniform_(m.weight)
         torch.nn.init.constant_(m.bias, 0)
 
 
@@ -33,6 +34,32 @@ class AttentionNetwork(nn.Module):
         x = nn.Sigmoid()(self.linear2(x))
 
         return x
+
+
+"""class AttentionCriticNetwork(nn.Module):
+    def __init__(self, inp, hid, out):
+        super(AttentionCriticNetwork, self).__init__()
+        self.linear1 = nn.Linear(inp, hid)
+        self.linear2 = nn.Linear(hid, out)
+
+        self.linear3 = nn.Linear(inp, hid)
+        self.linear4 = nn.Linear(hid, out)
+
+        self.apply(weights_init_)
+
+    def forward(self, inp, mode):
+        x1 = F.relu(self.linear1(inp))
+        x1 = nn.Sigmoid()(self.linear2(x1))
+
+        # If using an attention network for each critic
+        if mode == 'double':
+            x2 = F.relu(self.linear3(inp))
+            x2 = nn.Sigmoid()(self.linear4(x2))
+
+            return x1, x2
+        # If using a single attention network for both critics
+        else:
+            return x1"""
 
 
 class SinglePhiActor(nn.Module):
@@ -107,16 +134,17 @@ class SinglePhiCritic(nn.Module):
 
         self.apply(weights_init_)
 
-    def forward(self, inp):
-        x1 = F.relu(self.linear1(inp))
+    def forward(self, inp1, inp2):
+        x1 = F.relu(self.linear1(inp1))
         x1 = F.relu(self.linear2(x1))
         # x1 = F.relu(self.linear3(x1))
 
-        x2 = F.relu(self.linear4(inp))
+        x2 = F.relu(self.linear4(inp2))
         x2 = F.relu(self.linear5(x2))
         # x2 = F.relu(self.linear6(x2))
 
         return x1, x2
+
 
 class RhoCritic(nn.Module):
     def __init__(self, inp, out, action_space=None):
@@ -146,7 +174,7 @@ class RhoCritic(nn.Module):
 
 
 class DeepSetSAC:
-    def __init__(self, env_params):
+    def __init__(self, env_params, use_attention, double_critic_attention):
         # A raw version of DeepSet-based SAC without attention mechanism
         self.observation = None
         self.ag = None
@@ -156,6 +184,9 @@ class DeepSetSAC:
         self.dim_goal = env_params['goal']
         self.dim_act = env_params['action']
         self.num_blocks = 3
+        # Whether to use attention networks or concatenate goal to input
+        self.use_attention = use_attention
+        # double_critic_attention = double_critic_attention
 
         self.one_hot_encodings = [torch.tensor([1., 0., 0.]), torch.tensor([0., 1., 0.]), torch.tensor([0., 0., 1.])]
 
@@ -165,23 +196,42 @@ class DeepSetSAC:
         self.target_q2_pi_tensor = None
         self.pi_tensor = None
         self.log_prob = None
-        # Define the forming blocks of the DeepSet network
-        self.attention_actor = AttentionNetwork(self.dim_goal, 256, self.dim_body + self.dim_object + self.num_blocks)
-        self.attention_critic = AttentionNetwork(self.dim_goal, 256, self.dim_body + self.dim_object + self.num_blocks)
 
-        self.single_phi_actor = SinglePhiActor(self.dim_goal + self.dim_body + 2 * (self.num_blocks + self.dim_object), 256,
-                                               3 * (self.dim_body + (self.num_blocks + self.dim_object)))
-        self.rho_actor = RhoActor(3 * (self.dim_body + (self.num_blocks + self.dim_object)), env_params['action'])
+        # Define dimensions according to parameters use_attention
+        # if attention not used, then concatenate [g, ag] in input ==> dimension = 2 * dim_goal
+        dim_input_goals = self.dim_goal if use_attention else 2 * self.dim_goal
 
-        self.single_phi_critic = SinglePhiCritic(self.dim_goal + self.dim_body + 2 * (self.num_blocks + self.dim_object) + env_params['action'], 256,
-                                                 3 * (self.dim_body + (self.num_blocks + self.dim_object) + env_params['action']))
-        self.rho_critic = RhoCritic(3 * (self.dim_body + (self.num_blocks + self.dim_object) + env_params['action']), 1)
+        dim_input_objects = 2 * (self.num_blocks + self.dim_object)
 
-        self.single_phi_target_critic = SinglePhiCritic(self.dim_goal + self.dim_body + 2 * (self.num_blocks + self.dim_object) + env_params['action'], 256,
-                                                        3 * (self.dim_body + (self.num_blocks + self.dim_object) + env_params['action']))
-        self.rho_target_critic = RhoCritic(3 * (self.dim_body +  (self.num_blocks + self.dim_object) + env_params['action']), 1)
+        dim_phi_actor_input = dim_input_goals + self.dim_body + dim_input_objects
+        dim_phi_actor_output = 3 * (self.dim_body + (self.num_blocks + self.dim_object))
 
-    def forward_pass(self, obs, ag, g):
+        dim_rho_actor_input = 3 * (self.dim_body + (self.num_blocks + self.dim_object))
+        dim_rho_actor_output = env_params['action']
+
+        dim_phi_critic_input = dim_input_goals + self.dim_body + dim_input_objects + env_params['action']
+        dim_phi_critic_output = 3 * (self.dim_body + (self.num_blocks + self.dim_object) + env_params['action'])
+
+        dim_rho_critic_input = 3 * (self.dim_body + (self.num_blocks + self.dim_object) + env_params['action'])
+        dim_rho_critic_output = 1
+
+        if use_attention:
+            self.attention_actor = AttentionNetwork(self.dim_goal, 256, self.dim_body + self.dim_object + self.num_blocks)
+            self.attention_critic_1 = AttentionNetwork(self.dim_goal, 256, self.dim_body + self.dim_object + self.num_blocks)
+            # if self.double_critic_attention:
+            #    self.attention_critic_2 = AttentionNetwork(self.dim_goal, 256, self.dim_body + self.dim_object + self.num_blocks)
+            self.attention_critic_2 = AttentionNetwork(self.dim_goal, 256, self.dim_body + self.dim_object + self.num_blocks)
+
+        self.single_phi_actor = SinglePhiActor(dim_phi_actor_input, 256, dim_phi_actor_output)
+        self.rho_actor = RhoActor(dim_rho_actor_input, dim_rho_actor_output)
+
+        self.single_phi_critic = SinglePhiCritic(dim_phi_critic_input, 256, dim_phi_critic_output)
+        self.rho_critic = RhoCritic(dim_rho_critic_input, dim_rho_critic_output)
+
+        self.single_phi_target_critic = SinglePhiCritic(dim_phi_critic_input, 256, dim_phi_critic_output)
+        self.rho_target_critic = RhoCritic(dim_rho_critic_input, dim_rho_critic_output)
+
+    def forward_pass(self, obs, ag, g, eval=False):
         self.observation = obs
         self.ag = ag
         self.g = g
@@ -191,48 +241,69 @@ class DeepSetSAC:
                                   self.observation.narrow(-1, start=self.dim_object*i + self.dim_body, length=self.dim_object)),
                                  dim=-1) for i in range(self.num_blocks)]
 
-        input_objects = []
+        if self.use_attention:
+            # Pass through the attention network
+            output_attention_actor = self.attention_actor(self.g)
+            # body_attention_actor
+            body_input_actor = obs_body * output_attention_actor[:, :self.dim_body]
+            # object attention actor
+            obj_input_actor = [obs_objects[i] * output_attention_actor[:, self.dim_body:] for i in range(self.num_blocks)]
+            """if not self.double_critic_attention:
+                output_attention_critic = self.attention_critic_1(self.g)
+                # body attention critic ( same inputs for both critics)
+                body_input_critic_1 = obs_body * output_attention_critic[:, :self.dim_body]
+                body_input_critic_2 = obs_body * output_attention_critic[:, :self.dim_body]
+                # object attention critic
+                obj_input_critic_1 = [obs_objects[i] * output_attention_critic[:, self.dim_body:] for i in range(self.num_blocks)]
+                obj_input_critic_2 = [obs_objects[i] * output_attention_critic[:, self.dim_body:] for i in range(self.num_blocks)]"""
 
-        body_object_pairs_list = []
+            output_attention_critic_1 = self.attention_critic_1(self.g)
+            output_attention_critic_2 = self.attention_critic_2(self.g)
+            # body attention critic for each critic
+            body_input_critic_1 = obs_body * output_attention_critic_1[:, :self.dim_body]
+            body_input_critic_2 = obs_body * output_attention_critic_2[:, :self.dim_body]
+            # object attention critic for each critic
+            obj_input_critic_1 = [obs_objects[i] * output_attention_critic_1[:, self.dim_body:] for i in range(self.num_blocks)]
+            obj_input_critic_2 = [obs_objects[i] * output_attention_critic_2[:, self.dim_body:] for i in range(self.num_blocks)]
+        else:
+            body_input_actor = torch.cat([self.g, obs_body], dim=1)
+            body_input_critic_1 = torch.cat([self.g, obs_body], dim=1)
+            body_input_critic_2 = torch.cat([self.g, obs_body], dim=1)
 
-        # Pass through the attention network
-        # input_attention = torch.cat((self.ag, self.g), dim=-1)
+            obj_input_actor = [obs_objects[i] for i in range(self.num_blocks)]
+            obj_input_critic_1 = [obs_objects[i] for i in range(self.num_blocks)]
+            obj_input_critic_2 = [obs_objects[i] for i in range(self.num_blocks)]
 
-        output_attention_actor = self.attention_actor(self.g)
-        output_attention_critic = self.attention_critic(self.g)
-        # Process the shapes of the one hot encoding tensors according to input batch
-        """proc_one_hot = []
-        for i in range(self.num_blocks):
-            proc_one_hot.append(torch.cat(obs_body.shape[0] * [self.one_hot_encodings[i]]).reshape(obs_body.shape[0], self.num_blocks))"""
-
-
-        # body_attention
-        body_input_actor = obs_body * output_attention_actor[:, :self.dim_body]
-        body_input_critic = obs_body * output_attention_critic[:, :self.dim_body]
-
-        # obj attention
-        obj_input_actor = [obs_objects[i] * output_attention_actor[:, self.dim_body:] for i in range(self.num_blocks)]
-        obj_input_critic = [obs_objects[i] * output_attention_critic[:, self.dim_body:] for i in range(self.num_blocks)]
-
+        # Parallelization by stacking input tensors
         input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in permutations(obj_input_actor, 2)])
+
         output_phi_actor = self.single_phi_actor(input_actor).sum(dim=0)
-        self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
+        # self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
+        if not eval:
+            self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
+        else:
+            _, self.log_prob, self.pi_tensor = self.rho_actor.sample(output_phi_actor)
 
+        # The critic part
+        input_critic_1_without_actions = torch.stack([torch.cat([ag, body_input_critic_1, x[0], x[1]], dim=1)
+                                                      for x in permutations(obj_input_critic_1, 2)])
+        input_critic_2_without_actions = torch.stack([torch.cat([ag, body_input_critic_2, x[0], x[1]], dim=1)
+                                                      for x in permutations(obj_input_critic_2, 2)])
 
-        input_critic_without_actions = torch.stack([torch.cat([ag, body_input_critic, x[0], x[1]], dim=1) for x in permutations(obj_input_critic, 2)])
         repeat_actions = self.pi_tensor.repeat(input_actor.shape[0], 1, 1)
-        input_critic = torch.cat([input_critic_without_actions, repeat_actions], dim=-1)
+        input_critic_1 = torch.cat([input_critic_1_without_actions, repeat_actions], dim=-1)
+        input_critic_2 = torch.cat([input_critic_2_without_actions, repeat_actions], dim=-1)
 
         with torch.no_grad():
-            output_phi_target_critic1, output_phi_target_critic2 = self.single_phi_target_critic(input_critic)
-            output_phi_target_critic1 = output_phi_target_critic1.sum(dim=0)
-            output_phi_target_critic2 = output_phi_target_critic2.sum(dim=0)
-            self.target_q1_pi_tensor, self.target_q2_pi_tensor = self.rho_target_critic(output_phi_target_critic1, output_phi_target_critic2)
+            output_phi_target_critic_1, output_phi_target_critic_2 = self.single_phi_target_critic(input_critic_1, input_critic_2)
+            output_phi_target_critic_1 = output_phi_target_critic_1.sum(dim=0)
+            output_phi_target_critic_2 = output_phi_target_critic_2.sum(dim=0)
+            self.target_q1_pi_tensor, self.target_q2_pi_tensor = self.rho_target_critic(output_phi_target_critic_1, output_phi_target_critic_2)
 
-        output_phi_critic1, output_phi_critic2 = self.single_phi_critic(input_critic)
-        output_phi_critic1 = output_phi_critic1.sum(dim=0)
-        output_phi_critic2 = output_phi_critic2.sum(dim=0)
-        self.q1_pi_tensor, self.q2_pi_tensor = self.rho_critic(output_phi_critic1, output_phi_critic2)
+        output_phi_critic_1, output_phi_critic_2 = self.single_phi_critic(input_critic_1, input_critic_2)
+        output_phi_critic_1 = output_phi_critic_1.sum(dim=0)
+        output_phi_critic_2 = output_phi_critic_2.sum(dim=0)
+        self.q1_pi_tensor, self.q2_pi_tensor = self.rho_critic(output_phi_critic_1, output_phi_critic_2)
 
     def forward_with_actions(self, obs, ag, g, actions):
         self.observation = obs
@@ -244,35 +315,44 @@ class DeepSetSAC:
                                   self.observation.narrow(-1, start=self.dim_object * i + self.dim_body, length=self.dim_object)),
                                  dim=-1) for i in range(self.num_blocks)]
 
-        input_objects = []
+        if self.use_attention:
+            """if not self.double_critic_attention:
+                output_attention_critic = self.attention_critic_1(self.g)
+                # body attention critic ( same inputs for both critics)
+                body_input_critic_1 = obs_body * output_attention_critic[:, :self.dim_body]
+                body_input_critic_2 = obs_body * output_attention_critic[:, :self.dim_body]
+                # object attention critic
+                obj_input_critic_1 = [obs_objects[i] * output_attention_critic[:, self.dim_body:] for i in range(self.num_blocks)]
+                obj_input_critic_2 = [obs_objects[i] * output_attention_critic[:, self.dim_body:] for i in range(self.num_blocks)]"""
 
-        body_object_pairs_list = []
+            output_attention_critic_1 = self.attention_critic_1(self.g)
+            output_attention_critic_2 = self.attention_critic_2(self.g)
+            # body attention critic for each critic
+            body_input_critic_1 = obs_body * output_attention_critic_1[:, :self.dim_body]
+            body_input_critic_2 = obs_body * output_attention_critic_2[:, :self.dim_body]
+            # object attention critic for each critic
+            obj_input_critic_1 = [obs_objects[i] * output_attention_critic_1[:, self.dim_body:] for i in range(self.num_blocks)]
+            obj_input_critic_2 = [obs_objects[i] * output_attention_critic_2[:, self.dim_body:] for i in range(self.num_blocks)]
+        else:
+            body_input_critic_1 = torch.cat([self.g, obs_body], dim=1)
+            body_input_critic_2 = torch.cat([self.g, obs_body], dim=1)
 
-        # Pass through the attention network
-        # input_attention = torch.cat((self.ag, self.g), dim=-1)
+            obj_input_critic_1 = [obs_objects[i] for i in range(self.num_blocks)]
+            obj_input_critic_2 = [obs_objects[i] for i in range(self.num_blocks)]
 
-        output_attention_actor = self.attention_actor(self.g)
-        output_attention_critic = self.attention_critic(self.g)
-        # Process the shapes of the one hot encoding tensors according to input batch
-        """proc_one_hot = []
-        for i in range(self.num_blocks):
-            proc_one_hot.append(torch.cat(obs_body.shape[0] * [self.one_hot_encodings[i]]).reshape(obs_body.shape[0], self.num_blocks))"""
+        input_critic_1_without_actions = torch.stack([torch.cat([ag, body_input_critic_1, x[0], x[1]], dim=1)
+                                                      for x in permutations(obj_input_critic_1, 2)])
+        input_critic_2_without_actions = torch.stack([torch.cat([ag, body_input_critic_2, x[0], x[1]], dim=1)
+                                                      for x in permutations(obj_input_critic_2, 2)])
 
-        # body_attention
-        body_input_critic = obs_body * output_attention_critic[:, :self.dim_body]
+        repeat_actions = actions.repeat(input_critic_1_without_actions.shape[0], 1, 1)
+        input_critic_1 = torch.cat([input_critic_1_without_actions, repeat_actions], dim=-1)
+        input_critic_2 = torch.cat([input_critic_2_without_actions, repeat_actions], dim=-1)
 
-        # obj attention
-        obj_input_critic = [obs_objects[i] * output_attention_critic[:, self.dim_body:] for i in range(self.num_blocks)]
-
-        input_critic_without_actions = torch.stack([torch.cat([ag, body_input_critic, x[0], x[1]], dim=1) for x in permutations(obj_input_critic, 2)])
-        repeat_actions = actions.repeat(input_critic_without_actions.shape[0], 1, 1)
-        input_critic = torch.cat([input_critic_without_actions, repeat_actions], dim=-1)
-
-
-        output_phi_critic1, output_phi_critic2 = self.single_phi_critic(input_critic)
-        output_phi_critic1 = output_phi_critic1.sum(dim=0)
-        output_phi_critic2 = output_phi_critic2.sum(dim=0)
-        q1_pi_tensor, q2_pi_tensor = self.rho_critic(output_phi_critic1, output_phi_critic2)
+        output_phi_critic_1, output_phi_critic_2 = self.single_phi_critic(input_critic_1, input_critic_2)
+        output_phi_critic_1 = output_phi_critic_1.sum(dim=0)
+        output_phi_critic_2 = output_phi_critic_2.sum(dim=0)
+        q1_pi_tensor, q2_pi_tensor = self.rho_critic(output_phi_critic_1, output_phi_critic_2)
 
         return q1_pi_tensor, q2_pi_tensor
 

@@ -10,7 +10,7 @@ from rl_modules.sac_models import QNetworkFlat, GaussianPolicyFlat, ConfigNetwor
 from mpi_utils.normalizer import normalizer
 from her_modules.her import her_sampler
 from queues import CompetenceQueue
-from utils import rollout, load_models, generate_goals, init_storage
+from utils import hard_update, rollout, load_models, generate_goals, init_storage
 import pickle as pkl
 import datetime
 from rl_modules.sac_deepset_models import DeepSetSAC
@@ -21,11 +21,6 @@ from evaluation import eval_agent
 """
 SAC with HER (MPI-version)
 """
-
-
-def hard_update(target, source):
-    for target_param, param in zip(target.parameters(), source.parameters()):
-        target_param.data.copy_(param.data)
 
 
 class SACAgent:
@@ -78,28 +73,42 @@ class SACAgent:
             self.policy_optim = torch.optim.Adam(self.actor_network.parameters(), lr=self.args.lr_actor)
             self.critic_optim = torch.optim.Adam(self.critic_network.parameters(), lr=self.args.lr_critic)
         elif self.architecture == 'deepsets':
-            self.model = DeepSetSAC(env_params)
+            self.model = DeepSetSAC(env_params, self.args.deepsets_attention, self.args.double_critic_attention)
             # sync the networks across the CPUs
             sync_networks(self.model.rho_actor)
             sync_networks(self.model.rho_critic)
             sync_networks(self.model.single_phi_actor)
             sync_networks(self.model.single_phi_critic)
-            sync_networks(self.model.attention_actor)
-            sync_networks(self.model.attention_critic)
+            if self.args.deepsets_attention:
+                sync_networks(self.model.attention_actor)
+                sync_networks(self.model.attention_critic_1)
+                sync_networks(self.model.attention_critic_2)
 
             hard_update(self.model.single_phi_target_critic, self.model.single_phi_critic)
             hard_update(self.model.rho_target_critic, self.model.rho_critic)
             sync_networks(self.model.single_phi_target_critic)
             sync_networks(self.model.rho_target_critic)
             # create the optimizer
-            self.policy_optim = torch.optim.Adam(list(self.model.single_phi_actor.parameters()) +
-                                                 list(self.model.rho_actor.parameters()) +
-                                                 list(self.model.attention_actor.parameters()),
-                                                 lr=self.args.lr_actor)
-            self.critic_optim = torch.optim.Adam(list(self.model.single_phi_critic.parameters()) +
-                                                 list(self.model.rho_critic.parameters()) +
-                                                 list(self.model.attention_critic.parameters()),
-                                                 lr=self.args.lr_critic)
+            if self.args.deepsets_attention:
+                self.policy_optim = torch.optim.Adam(list(self.model.single_phi_actor.parameters()) +
+                                                     list(self.model.rho_actor.parameters()) +
+                                                     list(self.model.attention_actor.parameters()),
+                                                     lr=self.args.lr_actor)
+
+                self.critic_optim = torch.optim.Adam(list(self.model.single_phi_critic.parameters()) +
+                                                     list(self.model.rho_critic.parameters()) +
+                                                     list(self.model.attention_critic_1.parameters()) +
+                                                     list(self.model.attention_critic_2.parameters()),
+                                                     lr=self.args.lr_critic)
+
+            else:
+                self.policy_optim = torch.optim.Adam(list(self.model.single_phi_actor.parameters()) +
+                                                     list(self.model.rho_actor.parameters()),
+                                                     lr=self.args.lr_actor)
+                self.critic_optim = torch.optim.Adam(list(self.model.single_phi_critic.parameters()) +
+                                                     list(self.model.rho_critic.parameters()),
+                                                     lr=self.args.lr_critic)
+
             # self.attention_optim = torch.optim.Adam(self.model.attention.parameters(), lr=self.args.lr_critic)
         else:
             raise NotImplementedError
@@ -137,16 +146,16 @@ class SACAgent:
         train the network
 
         """
-        # for tensorboardX
+        """# for tensorboardX
         global writer
 
         if MPI.COMM_WORLD.Get_rank() == 0:
             writer = SummaryWriter(logdir='runs/{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
                                                                         self.args.env_name,
-                                                                        self.args.folder_prefix, "autotune" if self.args.automatic_entropy_tuning else ""))
+                                                                        self.args.folder_prefix, "autotune" if self.args.automatic_entropy_tuning else ""))"""
 
         # start to collect samples
-        updates = 0
+        #updates = 0
         for epoch in range(self.args.n_epochs):
             for _ in range(self.args.n_cycles):
                 # Initialize dictionaries to contain successes relative to each bucket (local ~ per CPU | global ~ all CPUs gathered)
@@ -199,13 +208,13 @@ class SACAgent:
                     else:
                         up_bucket = mb_buckets[1]
                     critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = self._update_network(up_bucket, epoch)
-                    if MPI.COMM_WORLD.Get_rank() == 0:
+                    """if MPI.COMM_WORLD.Get_rank() == 0:
                         writer.add_scalar('loss/critic_1', critic_1_loss, updates)
                         writer.add_scalar('loss/critic_2', critic_2_loss, updates)
                         writer.add_scalar('loss/policy', policy_loss, updates)
                         writer.add_scalar('loss/entropy_loss', ent_loss, updates)
                         writer.add_scalar('entropy_temprature/alpha', alpha, updates)
-                    updates += 1
+                    updates += 1"""
                 # soft update
                 if self.architecture == 'deepsets':
                     self._soft_update_target_network(self.model.single_phi_target_critic, self.model.single_phi_critic)
@@ -247,12 +256,11 @@ class SACAgent:
         return [cq.C for cq in self.competence_computers]
 
     # pre_process the inputs
-    def _preproc_inputs(self, obs, ag, g):
+    def _preproc_inputs(self, obs, g):
         obs_norm = self.o_norm.normalize(obs)
         g_norm = self.g_norm.normalize(g)
-        ag_norm = self.g_norm.normalize(ag)
         # concatenate the stuffs
-        inputs = np.concatenate([obs_norm, ag_norm, g_norm])
+        inputs = np.concatenate([obs_norm, g_norm])
         inputs = torch.tensor(inputs, dtype=torch.float32).unsqueeze(0)
         if self.args.cuda:
             inputs = inputs.cuda()
@@ -281,7 +289,7 @@ class SACAgent:
                        'ag_next': mb_ag_next,
                        }
         transitions = self.her_module.sample_her_transitions(buffer_temp, num_transitions)
-        obs, g = transitions['obs'], transitions['g']  # changed g --> ag
+        obs, g = transitions['obs'], transitions['g']
         # pre process the obs and g
         transitions['obs'], transitions['g'] = self._preproc_og(obs, g)
         # update
@@ -331,8 +339,8 @@ class SACAgent:
         if self.architecture == 'flat':
             critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs = update_flat(self.actor_network, self.critic_network, self.critic_target_network,
                                                                            self.policy_optim, self.critic_optim, self.alpha, self.log_alpha,
-                                                                           self.target_entropy, self.alpha_optim, obs_norm, ag_norm, g_norm,
-                                                                           obs_next_norm, ag_next_norm, actions, rewards, self.args)
+                                                                           self.target_entropy, self.alpha_optim, obs_norm, g_norm, obs_next_norm,
+                                                                           actions, rewards, self.args)
         elif self.architecture == 'disentangled':
             critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs = update_disentangled(self.actor_network, self.critic_network,
                                                                                    self.critic_target_network, self.configuration_network,

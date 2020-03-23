@@ -1,9 +1,15 @@
 import numpy as np
 import torch
+from datetime import datetime
 import itertools
 import os
 import json
 from mpi4py import MPI
+
+
+def hard_update(target, source):
+    for target_param, param in zip(target.parameters(), source.parameters()):
+        target_param.data.copy_(param.data)
 
 
 def rollout(env, env_params, agent, args, goals, animated=False):
@@ -48,7 +54,7 @@ def rollout(env, env_params, agent, args, goals, animated=False):
             ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
             if agent.architecture == 'deepsets':
                 obs_tensor = torch.tensor(agent.o_norm.normalize(obs), dtype=torch.float32).unsqueeze(0)
-                agent.model.forward_pass(obs_tensor, ag_norm, g_norm)
+                agent.model.forward_pass(obs_tensor, ag_norm, g_norm, eval=eval)
                 action = agent.model.pi_tensor.numpy()[0]
             elif agent.architecture == 'disentangled':
                 z_ag = agent.configuration_network(ag_norm)[0]
@@ -57,7 +63,7 @@ def rollout(env, env_params, agent, args, goals, animated=False):
                                             dtype=torch.float32).unsqueeze(0)
                 action = agent._select_actions(input_tensor, eval=eval)
             else:
-                input_tensor = agent._preproc_inputs(obs, ag, g)  # PROCESSING TO CHECK
+                input_tensor = agent._preproc_inputs(obs, g)  # PROCESSING TO CHECK
                 action = agent._select_actions(input_tensor, eval=eval)
         # feed the actions into the environment
         if animated:
@@ -223,7 +229,11 @@ def init_storage(args):
     # path to save the model
     model_path = os.path.join(args.save_dir, args.env_name + '_' + args.folder_prefix)
     if args.curriculum_learning:
-        model_path = os.path.join(args.save_dir, '{}_Curriculum_{}'.format(args.env_name, args.folder_prefix))
+        model_path = os.path.join(args.save_dir, '{}_curriculum_{}'.format(datetime.now(), args.architecture))
+        if args.deepsets_attention:
+            model_path += '_attention'
+        if args.double_critic_attention:
+            model_path += '_double'
     # path to save evaluations
     eval_path = os.path.join(model_path, 'eval')
     if not os.path.exists(model_path):
