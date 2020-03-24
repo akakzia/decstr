@@ -14,10 +14,11 @@ from utils import hard_update, rollout, load_models, generate_goals, init_storag
 import pickle as pkl
 import datetime
 from rl_modules.sac_deepset_models import DeepSetSAC
-from stats import save_plot
+from stats import save_plot, plot_times
 from updates import update_flat, update_disentangled, update_deepsets
 from logger import log_results
 from evaluation import eval_agent
+import time
 """
 SAC with HER (MPI-version)
 """
@@ -155,8 +156,26 @@ class SACAgent:
                                                                         self.args.folder_prefix, "autotune" if self.args.automatic_entropy_tuning else ""))"""
 
         # start to collect samples
-        #updates = 0
+        # updates = 0
+        # La j'initialise des listes vides qui va contenir le temps pour chaque époque (pour le plot)
+        times_epoch = []
+        times_update = []
+        times_tensor = []
+        times_next_q = []
+        times_losses = []
+        times_pi = []
+        times_critic = []
         for epoch in range(self.args.n_epochs):
+            # j'utilise time.clock() qui donne le temps actuel. Pour connaitre le temps d'une fonction je fais la différence entre deux
+            # time.clock(), un au début et un à la fin de la fonction
+            t0_epoch = time.clock()
+            # J'initialise le temps de chaque fonction à 0 pour pouvoir sommer dans les boucles/cycles
+            t_updates = 0
+            t_tensorize = 0
+            t_next_q = 0
+            t_losses = 0
+            t_pi = 0
+            t_critic = 0
             for _ in range(self.args.n_cycles):
                 # Initialize dictionaries to contain successes relative to each bucket (local ~ per CPU | global ~ all CPUs gathered)
                 mb_successes_local = {i: [] for i in range(self.num_buckets)}
@@ -207,7 +226,16 @@ class SACAgent:
                         up_bucket = mb_buckets[0]
                     else:
                         up_bucket = mb_buckets[1]
-                    critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = self._update_network(up_bucket, epoch)
+                    t0_single_update = time.clock()
+                    critic_1_loss, critic_2_loss, policy_loss, t1_tensorize, \
+                    t1_next_q, t1_losses, t1_pi, t1_critic = self._update_network(up_bucket, epoch)
+                    t1_single_update = time.clock() - t0_single_update
+                    t_updates += t1_single_update
+                    t_tensorize += t1_tensorize
+                    t_next_q += t1_next_q
+                    t_losses += t1_losses
+                    t_pi += t1_pi
+                    t_critic += t1_critic
                     """if MPI.COMM_WORLD.Get_rank() == 0:
                         writer.add_scalar('loss/critic_1', critic_1_loss, updates)
                         writer.add_scalar('loss/critic_2', critic_2_loss, updates)
@@ -221,10 +249,22 @@ class SACAgent:
                     self._soft_update_target_network(self.model.rho_target_critic, self.model.rho_critic)
                 else:
                     self._soft_update_target_network(self.critic_target_network, self.critic_network)
+
             if epoch % self.args.save_freq == 0 and self.args.evaluations:
                 res = eval_agent(self, curriculum=self.args.curriculum_learning, separate_goals=self.args.separate_goals)
-            log_results(self, epoch, res, evaluations=self.args.evaluations, frequency=self.args.save_freq, store_model=True,
+            log_results(self, epoch, res, evaluations=self.args.evaluations, frequency=self.args.save_freq, store_model=False,
                         store_stats=False, separate_goals=self.args.separate_goals)
+            t1_epoch = time.clock() - t0_epoch
+            times_epoch.append(t1_epoch)
+            times_update.append(t_updates)
+            times_tensor.append(t_tensorize)
+            times_next_q.append(t_next_q)
+            times_losses.append(t_losses)
+            times_pi.append(t_pi)
+            times_critic.append(t_critic)
+            if MPI.COMM_WORLD.Get_rank() == 0:
+                plot_times(times_epoch, times_update, times_tensor, times_next_q, times_losses, times_pi,
+                           times_critic, MPI.COMM_WORLD.Get_rank())
 
     # Update LP probability
     def _update_p(self, epsilon=0.4):
@@ -319,7 +359,6 @@ class SACAgent:
             transitions = self.buffer.sample(self.args.batch_size, head)
         else:
             transitions = self.buffer.sample(self.args.batch_size)
-
         # pre-process the observation and goal
         o, o_next, g, ag, ag_next, actions, rewards = transitions['obs'], transitions['obs_next'], transitions['g'], transitions['ag'], \
                                                       transitions['ag_next'], transitions['actions'], transitions['r']
@@ -342,21 +381,21 @@ class SACAgent:
                                                                            self.target_entropy, self.alpha_optim, obs_norm, g_norm, obs_next_norm,
                                                                            actions, rewards, self.args)
         elif self.architecture == 'disentangled':
-            critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs = update_disentangled(self.actor_network, self.critic_network,
+            critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs,  = update_disentangled(self.actor_network, self.critic_network,
                                                                                    self.critic_target_network, self.configuration_network,
                                                                                    self.policy_optim, self.critic_optim, self.configuration_optim,
                                                                                    self.alpha, self.log_alpha, self.target_entropy, self.alpha_optim,
                                                                                    obs_norm, ag_norm, g_norm, obs_next_norm, ag_next_norm, g_next_norm,
                                                                                    actions, rewards, self.args)
         elif self.architecture == 'deepsets':
-            critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs = update_deepsets(self.model, self.policy_optim, self.critic_optim,
+            critic_1_loss, critic_2_loss, actor_loss, t_tensorize, t_next_q, t_losses, t_pi, t_critic = update_deepsets(self.model, self.policy_optim, self.critic_optim,
                                                                                self.alpha, self.log_alpha, self.target_entropy,
                                                                                self.alpha_optim, obs_norm, ag_norm, g_norm, obs_next_norm,
                                                                                ag_next_norm, actions, rewards, self.args)
         else:
             raise NotImplementedError
 
-        return critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs
+        return critic_1_loss, critic_2_loss, actor_loss, t_tensorize, t_next_q, t_losses, t_pi, t_critic
 
     def log_results(self, epoch, overall_stats, evaluations=True, frequency=10, store_model=True, store_stats=False,
                     separate_goals=False):
@@ -485,8 +524,8 @@ class SACAgent:
                 stats.append((mean, std))
                 res.append(mean)
             self.overall_stats.append(stats)
-            if MPI.COMM_WORLD.Get_rank() == 0:
-                save_plot(np.array(self.overall_stats))
+            #if MPI.COMM_WORLD.Get_rank() == 0:
+            #    save_plot(np.array(self.overall_stats))
             return res
         if not curriculum and not separate_goals:
             total_success_rate = []

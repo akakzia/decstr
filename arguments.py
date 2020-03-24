@@ -11,9 +11,9 @@ def get_args():
     # the environment setting
     parser.add_argument('--env-name', type=str, default='FetchManipulate3Objects-v0', help='the environment name')
     parser.add_argument('--agent', type=str, default='SAC', help='the agent name')
-    parser.add_argument('--n-epochs', type=int, default=1, help='the number of epochs to train the agent')
-    parser.add_argument('--n-cycles', type=int, default=1, help='the times to collect samples per epoch')
-    parser.add_argument('--n-batches', type=int, default=1, help='the times to update the network')
+    parser.add_argument('--n-epochs', type=int, default=100, help='the number of epochs to train the agent')
+    parser.add_argument('--n-cycles', type=int, default=50, help='the times to collect samples per epoch')
+    parser.add_argument('--n-batches', type=int, default=40, help='the times to update the network')
 
     parser.add_argument('--evaluations', type=bool, default=True, help='do evaluation at the end of the epoch w/ frequency')
     parser.add_argument('--separate-goals', type=bool, default=False, help='separate the goals while evaluating')
@@ -52,8 +52,8 @@ def get_args():
 
     # Deep sets arguments
     parser.add_argument('--architecture', type=str, default='deepsets', help='The architecture of the networks')
-    parser.add_argument('--deepsets-attention', type=bool, default=True, help='Use attention in deepsets')
-    parser.add_argument('--double-critic-attention', type=bool, default=True, help='Use a different critic attention network for each critic')
+    parser.add_argument('--deepsets-attention', type=bool, default=False, help='Use attention in deepsets')
+    parser.add_argument('--double-critic-attention', type=bool, default=False, help='Use a different critic attention network for each critic')
 
     # Demonstrations
     parser.add_argument('--use-demos', type=bool, default=False, help='Use demonstrations and a second behavioral cloning loss')
@@ -65,7 +65,7 @@ def get_args():
     parser.add_argument('--fine-tune', type=bool, default=False, help='Do fine tuning over existing model')
     parser.add_argument('--model-path', type=str, default='', help='The source model')
 
-    parser.add_argument('--n-test-rollouts', type=int, default=1, help='the number of tests')
+    parser.add_argument('--n-test-rollouts', type=int, default=5, help='the number of tests')
     parser.add_argument('--clip-range', type=float, default=5, help='the clip range')
     parser.add_argument('--demo-length', type=int, default=20, help='the demo length')
     parser.add_argument('--cuda', action='store_true', help='if use gpu do the acceleration')
