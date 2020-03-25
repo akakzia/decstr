@@ -196,13 +196,14 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
 
     t0_losses = time.clock()
     # the q loss
-    qf1, qf2 = model.forward_with_actions(obs_norm_tensor, ag_norm_tensor, g_norm_tensor, actions_tensor)
+    qf1, qf2 = model.forward_pass(obs_norm_tensor, ag_norm_tensor, g_norm_tensor, actions=actions_tensor)
     qf1_loss = F.mse_loss(qf1, next_q_value)
     qf2_loss = F.mse_loss(qf2, next_q_value)
     # qf_loss = qf1_loss + qf2_loss
 
     # the actor loss
-    model.forward_pass(obs_norm_tensor, ag_norm_tensor, g_norm_tensor)
+    # forward pass already done above
+    # model.forward_pass(obs_norm_tensor, ag_norm_tensor, g_norm_tensor)
     pi, log_pi = model.pi_tensor, model.log_prob
     qf1_pi, qf2_pi = model.q1_pi_tensor, model.q2_pi_tensor
     min_qf_pi = torch.min(qf1_pi, qf2_pi)
@@ -211,10 +212,9 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
     t1_losses = time.clock() - t0_losses
 
     t0_pi_update = time.clock()
-
     # start to update the network
     policy_optim.zero_grad()
-    policy_loss.backward()
+    policy_loss.backward(retain_graph=True)
     if args.deepsets_attention:
         sync_grads(model.attention_actor)
     sync_grads(model.single_phi_actor)
@@ -224,7 +224,6 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
     t1_pi_update = time.clock() - t0_pi_update
 
     t0_critic_update = time.clock()
-
     # update the critic_network
     # attention_optim.zero_grad()
     critic_optim.zero_grad()

@@ -54,7 +54,7 @@ def rollout(env, env_params, agent, args, goals, animated=False):
             ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
             if agent.architecture == 'deepsets':
                 obs_tensor = torch.tensor(agent.o_norm.normalize(obs), dtype=torch.float32).unsqueeze(0)
-                agent.model.forward_pass(obs_tensor, ag_norm, g_norm, eval=eval)
+                agent.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, eval=eval)
                 action = agent.model.pi_tensor.numpy()[0]
             elif agent.architecture == 'disentangled':
                 z_ag = agent.configuration_network(ag_norm)[0]
