@@ -25,7 +25,7 @@ def rollout(agent, animated=False):
             # Randomly select a goal among all valid and non valid goals
             goal = agent.goals[np.random.choice(np.arange(len(agent.goals)))]
         else:
-            eval = True if np.random.random() < 0.8 else False
+            eval = True if np.random.random() < 0.1 else False
             # select goal according to LP probability
             if eval:
                 bucket = np.random.choice(np.arange(nb_buckets))
