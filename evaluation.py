@@ -5,7 +5,7 @@ from stats import save_plot
 
 
 # do the evaluation
-def eval_agent(agent, curriculum=False, separate_goals=False):
+def eval_agent(agent, curriculum=False):
     # Curriculum evaluations with buckets of ascending complexity
     if curriculum:
         stats = []
@@ -15,7 +15,7 @@ def eval_agent(agent, curriculum=False, separate_goals=False):
             for _ in range(agent.args.n_test_rollouts):
                 per_success_rate = []
                 goal = agent.goals[i][np.random.choice(len(agent.goals[i]))]
-                observation = agent.env.reset_goal(np.array(goal))
+                observation = agent.env.reset_goal(np.array(goal), biased_init=agent.args.biased_init)
                 obs = observation['observation']
                 g = observation['desired_goal']
                 ag = observation['achieved_goal']
@@ -54,15 +54,15 @@ def eval_agent(agent, curriculum=False, separate_goals=False):
         return res
 
     #
-    elif separate_goals:
-        goals = agent.goals
+    """elif separate_goals:
         per_goal_sr = {}
         per_goal_std = {}
-        for goal in goals:
+        for i in range(agent.num_buckets):
             total_success_rate = []
             for _ in range(agent.args.n_test_rollouts):
                 per_success_rate = []
-                observation = agent.env.reset_goal(goal)
+                goal = agent.goals[i][np.random.choice(len(agent.goals[i]))]
+                observation = agent.env.reset_goal(np.array(goal))
                 obs = observation['observation']
                 observation['desired_goal'] = goal
                 ag = observation['achieved_goal']
@@ -124,4 +124,4 @@ def eval_agent(agent, curriculum=False, separate_goals=False):
         total_success_rate = np.array(total_success_rate)
         local_success_rate = np.mean(total_success_rate[:, -1])
         global_success_rate = MPI.COMM_WORLD.allreduce(local_success_rate, op=MPI.SUM)
-        return global_success_rate / MPI.COMM_WORLD.Get_size()
+        return global_success_rate / MPI.COMM_WORLD.Get_size()"""

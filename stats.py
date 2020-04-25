@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 
 
 def save_plot(stats, args):
-    colors = ['green', 'red', 'blue', 'indigo', 'orange']
-    num_buckets = 5
-    x = np.arange(0, len(stats), 1)*10
+    colors = ['forestgreen', 'tomato', 'darkcyan', 'mediumpurple', 'darkorange', 'dimgray', 'gold']
+    num_buckets = stats.shape[1]
+    x = np.arange(0, len(stats), 1)*args.save_freq*args.n_cycles*args.num_rollouts_per_mpi*50*24
     fig = plt.figure(figsize=(8, 6))
     ax = plt.subplot(111)
     ax.set_ylim(0, 1)
@@ -15,13 +15,14 @@ def save_plot(stats, args):
     box = ax.get_position()
     ax.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
     ax.set(ylabel='success rate')
-    ax.set_xlabel('Epochs')
-    #plt.title('Training success rate with LP-based curriculum on 5 buckets.'
-    #          ' \n predicates={close(), above()}, n_objects = 3')
+    ax.set_xlim(0, args.n_epochs*args.n_cycles*args.num_rollouts_per_mpi*50*24)
+    ax.set_xlabel('Time steps')
     plt.grid()
-    plt.legend(['Bucket {}'.format(i) for i in range(num_buckets)], fancybox=True, shadow=True, loc='lower center',
-               bbox_to_anchor=(0.5, -0.25), ncol=5)
-    plt.savefig('stats_{}_{}_{}.png'.format(args.architecture, args.deepsets_attention, args.double_critic_attention))
+    plt.legend(['Bucket {}'.format(i+1) for i in range(num_buckets)], fancybox=True, shadow=True, loc='lower center',
+               bbox_to_anchor=(0.5, -0.25), ncol=4)
+    plt.savefig('stats_{}_Attention_{}_Curriculum_{}.png'.format(args.architecture, args.deepsets_attention, args.curriculum_learning))
+    plt.cla()
+    plt.close(fig)
 
 
 def plot_times(epochs, updates, tensorize, next_q, losses, pi, critic, worker):

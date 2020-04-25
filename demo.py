@@ -8,9 +8,6 @@ import numpy as np
 from utils import generate_goals
 
 
-architecture01 = True
-
-
 # process the inputs
 def normalize_goal(g, g_mean, g_std, args):
     g_clip = np.clip(g, -args.clip_obs, args.clip_obs)
@@ -37,9 +34,10 @@ def process_inputs(o, g, o_mean, o_std, g_mean, g_std, args):
 if __name__ == '__main__':
     args = get_args()
     # load the model param
-    model_path = args.save_dir + args.env_name + '_Curriculum__deepsets02' + '/model_90.pt'
+    # model_path = args.save_dir + args.env_name + '_Curriculum__deepsets02' + '/model_90.pt'
+    model_path = '/home/ahakakzia/model_990.pt'
     if args.architecture == 'deepsets':
-        o_mean, o_std, g_mean, g_std, phi_a, phi_c, rho_a, rho_c, att = torch.load(model_path, map_location=lambda storage, loc: storage)
+        o_mean, o_std, g_mean, g_std, phi_a, phi_c, rho_a, rho_c = torch.load(model_path, map_location=lambda storage, loc: storage)
     else:
         o_mean, o_std, g_mean, g_std, model, _, config = torch.load(model_path, map_location=lambda storage, loc: storage)
     # create the environment
@@ -61,29 +59,29 @@ if __name__ == '__main__':
         agent.model.single_phi_critic.load_state_dict(phi_c)
         agent.model.rho_actor.load_state_dict(rho_a)
         agent.model.rho_critic.load_state_dict(rho_c)
-        agent.model.attention.load_state_dict(att)
+        #agent.model.attention.load_state_dict(att)
     else:
         agent.actor_network.load_state_dict(model)
         agent.actor_network.eval()
         agent.configuration_network.load_state_dict(config)
 
     s = 0
-    buckets = generate_goals(nb_objects=3, sym=1, asym=0)
+    buckets = generate_goals(nb_objects=3, sym=1, asym=1)
     for i in range(args.demo_length):
-        goal = buckets[0][np.random.choice(len(buckets[0]))]
-        observation = env.reset_goal(np.array(goal))
+        goal = buckets[6][np.random.choice(len(buckets[6]))]
+        observation = env.reset_goal(np.array(goal), eval=False)
         # start to do the demo
         obs = observation['observation']
         g = observation['desired_goal']
         ag = observation['achieved_goal']
-        for t in range(env._max_episode_steps):
+        for t in range(30):
             env.render()
             with torch.no_grad():
                 g_norm = torch.tensor(normalize_goal(g, g_mean, g_std, args), dtype=torch.float32).unsqueeze(0)
                 ag_norm = torch.tensor(normalize_goal(ag, g_mean, g_std, args), dtype=torch.float32).unsqueeze(0)
                 if agent.architecture == 'deepsets':
                     obs_tensor = torch.tensor(normalize(obs, o_mean, o_std, args), dtype=torch.float32).unsqueeze(0)
-                    agent.model.forward_pass(obs_tensor, ag_norm, g_norm)
+                    agent.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, eval=True)
                     action = agent.model.pi_tensor.numpy()[0]
                 elif agent.architecture == 'disentangled':
                     z_ag = agent.configuration_network(ag_norm)[0]

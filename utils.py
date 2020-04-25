@@ -4,7 +4,9 @@ from datetime import datetime
 import itertools
 import os
 import json
+import random
 from mpi4py import MPI
+from queues import CompetenceQueue
 
 
 def hard_update(target, source):
@@ -12,63 +14,61 @@ def hard_update(target, source):
         target_param.data.copy_(param.data)
 
 
-def rollout(env, env_params, agent, args, goals, animated=False):
-    """
-    Description
-    :param env:
-    :param env_params:
-    :param agent:
-    :param args:
-    :param goals:
-    :param animated
-    :return:
-    """
+def rollout(agent, animated=False):
     ep_obs, ep_ag, ep_g, ep_actions, ep_success = [], [], [], [], []
     eval = False
-    nb_buckets = len(list(goals.keys()))
+    nb_buckets = agent.num_buckets
     bucket = 0
     #  Desired goal selection according to params
-    if args.curriculum_learning:
-        eval = True if np.random.random() < 0.1 else False  #
-        # select goal according to LP probability
-        if eval:
-            #  goal = self.goals[np.random.choice(len(self.goals), 1)][0]
-            #  goals_for_competence.append(goal)
-            bucket = np.random.choice(np.arange(nb_buckets))
-            goal = goals[bucket][np.random.choice(len(goals[bucket]))]
+    if agent.args.curriculum_learning:
+        if agent.args.automatic_buckets and ((np.array([len(bucket) < 1 for bucket in agent.buckets.values()])).any() or np.random.uniform() < 0.2):
+            # Randomly select a goal among all valid and non valid goals
+            goal = agent.goals[np.random.choice(np.arange(len(agent.goals)))]
         else:
-            #  goal = self.goals[np.random.choice(len(self.goals), 1, p=self.p)][0]
-            bucket = np.random.choice(np.arange(nb_buckets), 1, p=agent.p)[0]
-            goal = goals[bucket][np.random.choice(len(goals[bucket]))]
+            eval = True if np.random.random() < 0.8 else False
+            # select goal according to LP probability
+            if eval:
+                bucket = np.random.choice(np.arange(nb_buckets))
+                goal = agent.buckets[bucket][np.random.choice(len(agent.buckets[bucket]))]
+            else:
+                bucket = np.random.choice(np.arange(nb_buckets), 1, p=agent.p)[0]
+                goal = agent.buckets[bucket][np.random.choice(len(agent.buckets[bucket]))]
     else:
-        # goal = goals[np.random.choice(len(goals), 1)][0]
-        pass
-    observation = env.unwrapped.reset_goal(np.array(goal))
+        flatten = lambda l: [item for sublist in list(agent.buckets.values()) for item in sublist]
+        goal = random.choice(flatten(agent.buckets))
+    observation = agent.env.reset_goal(np.array(goal), biased_init=agent.args.biased_init, eval=eval)
     obs = observation['observation']
     ag = observation['achieved_goal']
     g = observation['desired_goal']
     # start to collect samples
-    for t in range(env_params['max_timesteps']):
+    for t in range(agent.env_params['max_timesteps']):
+        # if an ag is not encountred by all workers, add it
+        if tuple(ag) not in sum(MPI.COMM_WORLD.allgather(agent.encountred_goals), []):
+            agent.encountred_goals.append(tuple(ag))
+            # if the encountred goal is new and was not predefined as a valid_goal, then add it
+            if tuple(ag) not in agent.valid_goals:
+                agent.valid_goals.append(tuple(ag))
+                agent.per_goal_competence_computers.append(CompetenceQueue(window=agent.args.queue_length))
         with torch.no_grad():
+            obs_norm = agent.o_norm.normalize(obs)
             g_norm = torch.tensor(agent.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
             ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
             if agent.architecture == 'deepsets':
-                obs_tensor = torch.tensor(agent.o_norm.normalize(obs), dtype=torch.float32).unsqueeze(0)
+                obs_tensor = torch.tensor(obs_norm, dtype=torch.float32).unsqueeze(0)
                 agent.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, eval=eval)
                 action = agent.model.pi_tensor.numpy()[0]
             elif agent.architecture == 'disentangled':
                 z_ag = agent.configuration_network(ag_norm)[0]
                 z_g = agent.configuration_network(g_norm)[0]
-                input_tensor = torch.tensor(np.concatenate([agent.o_norm.normalize(obs), z_ag, z_g]),
-                                            dtype=torch.float32).unsqueeze(0)
+                input_tensor = torch.tensor(np.concatenate([obs_norm, z_ag, z_g]), dtype=torch.float32).unsqueeze(0)
                 action = agent._select_actions(input_tensor, eval=eval)
             else:
                 input_tensor = agent._preproc_inputs(obs, g)  # PROCESSING TO CHECK
                 action = agent._select_actions(input_tensor, eval=eval)
         # feed the actions into the environment
         if animated:
-            env.render()
-        observation_new, _, _, info = env.step(action)
+            agent.env.render()
+        observation_new, _, _, info = agent.env.step(action)
         obs_new = observation_new['observation']
         ag_new = observation_new['achieved_goal']
         ep_success = info['is_success']  #
@@ -77,7 +77,6 @@ def rollout(env, env_params, agent, args, goals, animated=False):
         ep_ag.append(ag.copy())
         ep_g.append(g.copy())
         ep_actions.append(action.copy())
-        # ep_success.append(success.copy())  #
         # re-assign the observation
         obs = obs_new
         ag = ag_new
@@ -91,12 +90,6 @@ def load_models(path, actor, critic):
     actor.load_state_dict(model_actor)
     critic.load_state_dict(model_critic)
     return o_mean, o_std, g_mean, g_std
-
-
-def min_max_norm(vector):
-    if vector.min() == vector.max():
-        return np.ones(vector.shape[0])
-    return (vector-vector.min()) / (vector.max() - vector.min())
 
 
 def above_to_close(vector):
@@ -142,6 +135,11 @@ def one_above_two(vector):
             (vector[1] == 1. and vector[1] == vector[-2]) or (vector[3] == 1. and vector[3] == vector[-1]):
         return True
     return False
+
+
+stack_three_list = [(1., 1., 0., 1., 0., 0., 1., 0., 0.), (1., 0., 1., 0., 1., 0., 0., 0., 1.),
+                    (1., 1., 0., 0., 1., 1., 0., 0., 0.), (1., 0., 1., 1., 0., 0., 0., 1., 0.),
+                    (0., 1., 1., 0., 0., 1., 0., 0., 1.), (0., 1., 1., 0., 0., 0., 1., 1., 0.)]
 
 
 def generate_goals(nb_objects=3, sym=1, asym=1):
@@ -215,7 +213,14 @@ def generate_goals(nb_objects=3, sym=1, asym=1):
                 # Only stacks are close
                 buckets[2].append(configuration)
             elif sum(configuration[:3]) == 3. and valid(configuration[-6:]):
-                # Other configurations
+                if sum(configuration[-6:]) == 1:
+                    # Stack of 2 close to the third block
+                    buckets[3].append(configuration)
+                elif configuration[-6:] in [(1., 0., 1., 0., 0., 0.), (0., 1., 0., 0., 1., 0.), (0., 0., 0., 1., 0., 1.)]:
+                    # One block above two blocks (pyramid)
+                    buckets[3].append(configuration)
+            elif configuration in stack_three_list:
+                # Stack of 3
                 buckets[3].append(configuration)
             else:
                 # Not feasible
@@ -243,7 +248,3 @@ def init_storage(args):
     with open(os.path.join(model_path, 'config.json'), 'w') as f:
         json.dump(vars(args), f, indent=2)
     return model_path, eval_path
-
-
-def initDemoBuffer(buffer, path):
-    raise NotImplementedError

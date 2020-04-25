@@ -7,12 +7,16 @@ class CompetenceQueue():
     def __init__(self, window=500):
         self.window = window
         self.successes = deque(maxlen=2 * self.window)
+        self.times = deque(maxlen=2 * self.window)
         self.CP = 0.
         self.C = 0.
 
-    def update(self, success_list):
+    def update(self, success_list, time=None):
         for success in success_list:
             self.successes.append(success)
+        if time:
+            for t in time:
+                self.times.append(t)
 
         if self.size > 2:
             window = min(self.size // 2, self.window)
@@ -31,5 +35,6 @@ class CompetenceQueue():
 
     def clear_queue(self):
         self.successes = deque(maxlen=2 * self.window)
+        self.times = deque(maxlen=2 * self.window)
         self.CP = 0
         self.C = 0.

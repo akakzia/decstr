@@ -11,12 +11,14 @@ def get_args():
     # the environment setting
     parser.add_argument('--env-name', type=str, default='FetchManipulate3Objects-v0', help='the environment name')
     parser.add_argument('--agent', type=str, default='SAC', help='the agent name')
-    parser.add_argument('--n-epochs', type=int, default=100, help='the number of epochs to train the agent')
-    parser.add_argument('--n-cycles', type=int, default=50, help='the times to collect samples per epoch')
-    parser.add_argument('--n-batches', type=int, default=40, help='the times to update the network')
+    parser.add_argument('--n-epochs', type=int, default=10, help='the number of epochs to train the agent')
+    parser.add_argument('--n-cycles', type=int, default=5, help='the times to collect samples per epoch')
+    parser.add_argument('--n-batches', type=int, default=1, help='the times to update the network')
+    parser.add_argument('--biased-init', type=bool, default=True, help='use biased environment initializations')
+    parser.add_argument('--automatic-buckets', type=bool, default=True, help='automatically generate buckets during training')
+    parser.add_argument('--num-buckets', type=int, default=4, help='number of buckets for automatic generation')
 
     parser.add_argument('--evaluations', type=bool, default=True, help='do evaluation at the end of the epoch w/ frequency')
-    parser.add_argument('--separate-goals', type=bool, default=False, help='separate the goals while evaluating')
     parser.add_argument('--save-freq', type=int, default=10, help='the interval that save the trajectory')
 
     parser.add_argument('--seed', type=int, default=123, help='random seed')
@@ -31,7 +33,6 @@ def get_args():
     parser.add_argument('--random-eps', type=float, default=0.3, help='random eps')
     parser.add_argument('--buffer-size', type=int, default=int(1e6), help='the size of the buffer')
     parser.add_argument('--replay-k', type=int, default=4, help='ratio to be replace')
-    parser.add_argument('--multi_criteria_her', type=bool, default=False, help='Use MC_Hindsight')
     parser.add_argument('--clip-obs', type=float, default=200, help='the clip ratio')
     parser.add_argument('--batch-size', type=int, default=256, help='the sample batch size')
     parser.add_argument('--gamma', type=float, default=0.98, help='the discount factor')
@@ -55,17 +56,7 @@ def get_args():
     parser.add_argument('--deepsets-attention', type=bool, default=False, help='Use attention in deepsets')
     parser.add_argument('--double-critic-attention', type=bool, default=False, help='Use a different critic attention network for each critic')
 
-    # Demonstrations
-    parser.add_argument('--use-demos', type=bool, default=False, help='Use demonstrations and a second behavioral cloning loss')
-    parser.add_argument('--lambda1', type=float, default=0.001, help='Coefficient of the policy loss when using demonstrations')
-    parser.add_argument('--lambda2', type=float, default=0.0078, help='Coefficient of the behavioral cloning closs')
-    parser.add_argument('--l2-reg-coeff', type=float, default=0.005, help='Regularization coefficient')
-    parser.add_argument('--demos-path', type=str, default='demos/demos.pkl', help='The source model')
-
-    parser.add_argument('--fine-tune', type=bool, default=False, help='Do fine tuning over existing model')
-    parser.add_argument('--model-path', type=str, default='', help='The source model')
-
-    parser.add_argument('--n-test-rollouts', type=int, default=5, help='the number of tests')
+    parser.add_argument('--n-test-rollouts', type=int, default=1, help='the number of tests')
     parser.add_argument('--clip-range', type=float, default=5, help='the clip range')
     parser.add_argument('--demo-length', type=int, default=20, help='the demo length')
     parser.add_argument('--cuda', action='store_true', help='if use gpu do the acceleration')

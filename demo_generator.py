@@ -13,7 +13,7 @@ def generator(li):
 
 def main():
     env = gym.make('FetchManipulate3Objects-v0')
-    numDemos = 10
+    numDemos = 1
     numItr = 50
     buckets = generate_goals(nb_objects=3, sym=1, asym=1)
     demoBuffers = [{'obs': np.empty([10, 150, 55]),
@@ -27,12 +27,19 @@ def main():
         next_observations = []
         ags = []
         actions = []
-        bucket = np.random.choice(np.arange(4))
-        obs = env.reset()
+        bucket = 1 #np.random.choice(np.arange(4))
+        goal = buckets[bucket][np.random.choice(len(buckets[bucket]))]
+        proba = 1 - 0.152 - (0.035-0.034)/0.035
+        obs = env.reset_goal(np.array(goal), bucket, guide_proba=proba, train=True)
         observations.append(obs['observation'])
         ags.append(obs['achieved_goal'])
-        itr = 1
-        if bucket == 0:
+        for _ in range(10):
+            env.render()
+            obs, _, _, _ = env.step([0, 0, 0, -1])
+        env.close()
+        #itr = 1
+        #itr, o = grasp_object(env, itr, observations, next_observations, ags, actions, 0)
+        """if bucket == 0:
             pair = np.random.choice(np.arange(3), size=2, replace=False)
             itr, o = grasp_object(env, itr, observations, next_observations, ags, actions, target_idx=pair[0])
             itr, o, ag = pose_next_to(env, itr, observations, next_observations, ags, actions, pair[1])
@@ -89,7 +96,7 @@ def main():
 
     env.close()
     with open('data.json', 'w') as f:
-        pkl.dump(demoBuffers, f)
+        pkl.dump(demoBuffers, f)"""
 
 
 def grasp_object(env, itr, observations, next_observations, ags, actions, target_idx=0):
@@ -100,7 +107,7 @@ def grasp_object(env, itr, observations, next_observations, ags, actions, target
         action = np.concatenate((7*(-observation[:3] + observation[10+15*target_idx:13+15*target_idx]), np.ones(1)))
         if np.linalg.norm(-observation[:3] + observation[10+15*target_idx:13+15*target_idx]) < 0.005:
             for _ in range(10):
-
+                env.render()
                 action = [0., 0., 0.4, -1]
                 next_obs, r, d, info = env.step(action)
                 actions.append(action)
@@ -112,6 +119,7 @@ def grasp_object(env, itr, observations, next_observations, ags, actions, target
                 ags.append(ag)
             success = True
         else:
+            env.render()
             next_obs, r, d, info = env.step(action)
             actions.append(action)
             observation = next_obs['observation']

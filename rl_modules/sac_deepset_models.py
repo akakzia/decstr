@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
-from itertools import permutations
+from itertools import permutations, combinations
 import numpy as np
 
 LOG_SIG_MAX = 2
@@ -15,7 +15,6 @@ LATENT = 3
 def weights_init_(m):
     if isinstance(m, nn.Linear):
         torch.nn.init.xavier_uniform_(m.weight, gain=1)
-        # torch.nn.init.kaiming_uniform_(m.weight)
         torch.nn.init.constant_(m.bias, 0)
 
 
@@ -83,7 +82,7 @@ class RhoActor(nn.Module):
     def __init__(self, inp, out, action_space=None):
         super(RhoActor, self).__init__()
         self.linear1 = nn.Linear(inp, 256)
-        # self.linear2 = nn.Linear(256, 256)
+        self.linear2 = nn.Linear(256, 256)
         self.mean_linear = nn.Linear(256, out)
         self.log_std_linear = nn.Linear(256, out)
 
@@ -98,9 +97,8 @@ class RhoActor(nn.Module):
             self.action_bias = torch.FloatTensor((action_space.high + action_space.low) / 2.)
 
     def forward(self, x):
-        #x = torch.tanh(inp)
         x = F.relu(self.linear1(x))
-        # x = F.relu(self.linear2(x))
+        x = F.relu(self.linear2(x))
 
         mean = self.mean_linear(x)
         log_std = self.log_std_linear(x)
@@ -149,25 +147,23 @@ class SinglePhiCritic(nn.Module):
 class RhoCritic(nn.Module):
     def __init__(self, inp, out, action_space=None):
         super(RhoCritic, self).__init__()
-        self.linear1 = nn.Linear(inp, 256)  # Added one layer (To Check)
-        # self.linear2 = nn.Linear(256, 256)
+        self.linear1 = nn.Linear(inp, 256)
+        self.linear2 = nn.Linear(256, 256)
         self.linear3 = nn.Linear(256, out)
 
         self.linear4 = nn.Linear(inp, 256)
-        # self.linear5 = nn.Linear(256, 256)
+        self.linear5 = nn.Linear(256, 256)
         self.linear6 = nn.Linear(256, out)
 
         self.apply(weights_init_)
 
     def forward(self, inp1, inp2):
-        #x1 = torch.tanh(self.linear1(inp1))
         x1 = F.relu(self.linear1(inp1))
-        # x1 = F.relu(self.linear2(x1))
+        x1 = F.relu(self.linear2(x1))
         x1 = self.linear3(x1)
 
-        #x2 = torch.tanh(self.linear2(inp2))
         x2 = F.relu(self.linear4(inp2))
-        # x2 = F.relu(self.linear5(x2))
+        x2 = F.relu(self.linear5(x2))
         x2 = self.linear6(x2)
 
         return x1, x2
@@ -184,7 +180,7 @@ class DeepSetSAC:
         self.dim_goal = env_params['goal']
         self.dim_act = env_params['action']
         self.num_blocks = 3
-        self.n_permutations = len([x for x in permutations(range(self.num_blocks), 2)])
+        self.n_permutations = len([x for x in combinations(range(self.num_blocks), 2)])
 
         # Whether to use attention networks or concatenate goal to input
         self.use_attention = use_attention
@@ -208,12 +204,12 @@ class DeepSetSAC:
         dim_phi_actor_output = 3 * (self.dim_body + (self.num_blocks + self.dim_object))
 
         dim_rho_actor_input = 3 * (self.dim_body + (self.num_blocks + self.dim_object))
-        dim_rho_actor_output = env_params['action']
+        dim_rho_actor_output = self.dim_act
 
-        dim_phi_critic_input = dim_input_goals + self.dim_body + dim_input_objects + env_params['action']
-        dim_phi_critic_output = 3 * (self.dim_body + (self.num_blocks + self.dim_object) + env_params['action'])
+        dim_phi_critic_input = dim_input_goals + self.dim_body + dim_input_objects + self.dim_act
+        dim_phi_critic_output = 3 * (self.dim_body + (self.num_blocks + self.dim_object) + self.dim_act)
 
-        dim_rho_critic_input = 3 * (self.dim_body + (self.num_blocks + self.dim_object) + env_params['action'])
+        dim_rho_critic_input = 3 * (self.dim_body + (self.num_blocks + self.dim_object) + self.dim_act)
         dim_rho_critic_output = 1
 
         if use_attention:
@@ -231,7 +227,6 @@ class DeepSetSAC:
 
         self.single_phi_target_critic = SinglePhiCritic(dim_phi_critic_input, 256, dim_phi_critic_output)
         self.rho_target_critic = RhoCritic(dim_rho_critic_input, dim_rho_critic_output)
-
 
     def policy_forward_pass(self, obs, ag, g, eval=False):
         self.observation = obs
@@ -259,13 +254,13 @@ class DeepSetSAC:
                 obj_input_critic_1 = [obs_objects[i] * output_attention_critic[:, self.dim_body:] for i in range(self.num_blocks)]
                 obj_input_critic_2 = [obs_objects[i] * output_attention_critic[:, self.dim_body:] for i in range(self.num_blocks)]"""
 
-
         else:
             body_input_actor = torch.cat([self.g, obs_body], dim=1)
             obj_input_actor = [obs_objects[i] for i in range(self.num_blocks)]
 
         # Parallelization by stacking input tensors
-        input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in permutations(obj_input_actor, 2)])
+        #input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in permutations(obj_input_actor, 2)])
+        input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in combinations(obj_input_actor, 2)])
 
         output_phi_actor = self.single_phi_actor(input_actor).sum(dim=0)
         # self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
@@ -273,7 +268,6 @@ class DeepSetSAC:
             self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
         else:
             _, self.log_prob, self.pi_tensor = self.rho_actor.sample(output_phi_actor)
-
 
     def forward_pass(self, obs, ag, g, eval=False, actions=None):
         batch_size = obs.shape[0]
@@ -313,9 +307,9 @@ class DeepSetSAC:
             body_input = torch.cat([self.g, obs_body], dim=1)
             obj_input = [obs_objects[i] for i in range(self.num_blocks)]
 
-
         # Parallelization by stacking input tensors
-        input_actor = torch.stack([torch.cat([ag, body_input, x[0], x[1]], dim=1) for x in permutations(obj_input, 2)])
+        #input_actor = torch.stack([torch.cat([ag, body_input, x[0], x[1]], dim=1) for x in permutations(obj_input, 2)])
+        input_actor = torch.stack([torch.cat([ag, body_input, x[0], x[1]], dim=1) for x in combinations(obj_input, 2)])
 
         output_phi_actor = self.single_phi_actor(input_actor).sum(dim=0)
         # self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
@@ -331,7 +325,6 @@ class DeepSetSAC:
             repeat_actions = actions.repeat(self.n_permutations, 1, 1)
             input_critic_with_act = torch.cat([input_actor, repeat_actions], dim=-1)
             input_critic = torch.cat([input_critic, input_critic_with_act], dim=0)
-
 
         with torch.no_grad():
             output_phi_target_critic_1, output_phi_target_critic_2 = self.single_phi_target_critic(input_critic[:self.n_permutations])

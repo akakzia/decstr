@@ -82,7 +82,7 @@ def update_flat(actor_network, critic_network, critic_target_network, policy_opt
     return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
 
 
-def update_disentangled(actor_network, critic_network, critic_target_network, configuration_network, policy_optim, critic_optim, configuration_optim, alpha, log_alpha,
+def update_disentangled(actor_network, critic_network, critic_target_network, configuration_network, policy_optim, critic_optim, alpha, log_alpha,
                         target_entropy, alpha_optim, obs_norm, ag_norm, g_norm, obs_next_norm, ag_next_norm, g_next_norm, actions, rewards, args):
     obs_norm_tensor = torch.tensor(obs_norm, dtype=torch.float32)
     obs_next_norm_tensor = torch.tensor(obs_next_norm, dtype=torch.float32)
@@ -124,7 +124,6 @@ def update_disentangled(actor_network, critic_network, critic_target_network, co
     qf1, qf2 = critic_network(obs_norm_tensor, actions_tensor, config_ag_z, config_g_z)
     qf1_loss = F.mse_loss(qf1, next_q_value)
     qf2_loss = F.mse_loss(qf2, next_q_value)
-    #qf_loss = qf1_loss + qf2_loss
 
     # the actor loss
     pi, log_pi, _ = actor_network.sample(inputs_norm_tensor)
@@ -150,7 +149,7 @@ def update_disentangled(actor_network, critic_network, critic_target_network, co
     sync_grads(critic_network)
     critic_optim.step()
 
-    configuration_optim.step()
+    # configuration_optim.step()
     sync_grads(configuration_network)
 
     # configuration_optim.step()
@@ -163,7 +162,6 @@ def update_disentangled(actor_network, critic_network, critic_target_network, co
 def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_entropy, alpha_optim, obs_norm, ag_norm, g_norm,
                     obs_next_norm, ag_next_norm, actions, rewards, args):
 
-    t0_tensorize = time.clock()
     obs_norm_tensor = torch.tensor(obs_norm, dtype=torch.float32)
     obs_next_norm_tensor = torch.tensor(obs_next_norm, dtype=torch.float32)
     g_norm_tensor = torch.tensor(g_norm, dtype=torch.float32)
@@ -171,8 +169,6 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
     ag_next_norm_tensor = torch.tensor(ag_next_norm, dtype=torch.float32)
     actions_tensor = torch.tensor(actions, dtype=torch.float32)
     r_tensor = torch.tensor(rewards, dtype=torch.float32).reshape(rewards.shape[0], 1)
-
-    t1_tensorize = time.clock() - t0_tensorize
 
     if args.cuda:
         obs_norm_tensor = obs_norm_tensor.cuda()
@@ -183,8 +179,6 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
         actions_tensor = actions_tensor.cuda()
         r_tensor = r_tensor.cuda()
 
-    t0_compute_next_q = time.clock()
-
     with torch.no_grad():
         model.forward_pass(obs_next_norm_tensor, ag_next_norm_tensor, g_norm_tensor)
         actions_next, log_pi_next = model.pi_tensor, model.log_prob
@@ -192,14 +186,10 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
         min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - alpha * log_pi_next
         next_q_value = r_tensor + args.gamma * min_qf_next_target
 
-    t1_compute_next_q = time.clock() - t0_compute_next_q
-
-    t0_losses = time.clock()
     # the q loss
     qf1, qf2 = model.forward_pass(obs_norm_tensor, ag_norm_tensor, g_norm_tensor, actions=actions_tensor)
     qf1_loss = F.mse_loss(qf1, next_q_value)
     qf2_loss = F.mse_loss(qf2, next_q_value)
-    # qf_loss = qf1_loss + qf2_loss
 
     # the actor loss
     # forward pass already done above
@@ -209,9 +199,6 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
     min_qf_pi = torch.min(qf1_pi, qf2_pi)
     policy_loss = ((alpha * log_pi) - min_qf_pi).mean()
 
-    t1_losses = time.clock() - t0_losses
-
-    t0_pi_update = time.clock()
     # start to update the network
     policy_optim.zero_grad()
     policy_loss.backward(retain_graph=True)
@@ -221,13 +208,10 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
     sync_grads(model.rho_actor)
     policy_optim.step()
 
-    t1_pi_update = time.clock() - t0_pi_update
-
-    t0_critic_update = time.clock()
     # update the critic_network
     # attention_optim.zero_grad()
     critic_optim.zero_grad()
-    qf1_loss.backward()
+    qf1_loss.backward(retain_graph=True)
     if args.deepsets_attention:
         sync_grads(model.attention_critic_1)
     sync_grads(model.single_phi_critic)
@@ -242,9 +226,6 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
     sync_grads(model.rho_critic)
     critic_optim.step()
 
-    t1_critic_update = time.clock() - t0_critic_update
-
     alpha_loss, alpha_tlogs = update_entropy(alpha, log_alpha, target_entropy, log_pi, alpha_optim, args)
 
-    # return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
-    return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), t1_tensorize, t1_compute_next_q, t1_losses, t1_pi_update, t1_critic_update
+    return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
