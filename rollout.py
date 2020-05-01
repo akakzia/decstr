@@ -12,6 +12,7 @@ class RolloutWorker:
         self.policy = policy
         self.env_params = args.env_params
         self.biased_init = args.biased_init
+        self.goal_sampler = goal_sampler
 
     def generate_rollout(self, goals, self_eval, true_eval, animated=False):
 
@@ -38,6 +39,9 @@ class RolloutWorker:
                 obs_new = observation_new['observation']
                 ag_new = observation_new['achieved_goal']
                 ep_success = info['is_success']
+
+                if str(ag_new) not in self.goal_sampler.valid_goals_str:
+                    stop = 1
 
                 # append rollouts
                 ep_obs.append(obs.copy())

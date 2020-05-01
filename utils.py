@@ -242,10 +242,13 @@ def init_storage(args):
             logdir += '_double'
     # path to save evaluations
     model_path = os.path.join(logdir, 'models')
+    bucket_path = os.path.join(logdir, 'buckets')
     if not os.path.exists(logdir):
         os.mkdir(logdir)
     if not os.path.exists(model_path):
         os.mkdir(model_path)
+    if not os.path.exists(bucket_path):
+        os.mkdir(bucket_path)
     with open(os.path.join(logdir, 'config.json'), 'w') as f:
         json.dump(vars(args), f, indent=2)
-    return logdir, model_path
+    return logdir, model_path, bucket_path

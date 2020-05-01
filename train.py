@@ -40,7 +40,7 @@ def launch(args):
         torch.cuda.manual_seed(args.seed + MPI.COMM_WORLD.Get_rank())
 
     # get saving paths
-    logdir, model_path = init_storage(args)
+    logdir, model_path, bucket_path = init_storage(args)
     if rank == 0:
         logger.configure(dir=logdir)
 
@@ -107,6 +107,7 @@ def launch(args):
                 log_and_save(logdir, goal_sampler, epoch, episode_count, av_res, global_sr, t_epoch, t_total)
                 if epoch % args.save_freq == 0:
                     policy.save(model_path, epoch)
+                    goal_sampler.save_bucket_contents(bucket_path, epoch)
                 if rank==0: logger.info('\tEpoch #{}: SR: {}'.format(epoch, global_sr))
 
 

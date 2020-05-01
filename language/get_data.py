@@ -49,6 +49,6 @@ def get_data():
     predicate_to_id = dict(zip(predicates, range(9)))
     id_to_predicate = dict(zip(range(9), predicates))
 
-    colors = {'0':'green', '1':'blue', '2':'red'}
+    colors = {'0':'red', '1':'green', '2':'blue'}
 
     return unique_reached_config_transitions, reached_config_transitions, predicates, predicate_to_id, id_to_predicate, colors
