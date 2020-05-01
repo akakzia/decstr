@@ -17,7 +17,7 @@ def get_args():
     parser.add_argument('--n-cycles', type=int, default=5, help='the times to collect samples per epoch')
     parser.add_argument('--n-batches', type=int, default=1, help='the times to update the network')
     parser.add_argument('--biased-init', type=bool, default=True, help='use biased environment initializations')
-    parser.add_argument('--automatic-buckets', type=bool, default=True, help='automatically generate buckets during training')
+    parser.add_argument('--automatic-buckets', type=bool, default=False, help='automatically generate buckets during training')
     parser.add_argument('--num-buckets', type=int, default=4, help='number of buckets for automatic generation')
 
     parser.add_argument('--evaluations', type=bool, default=True, help='do evaluation at the end of the epoch w/ frequency')

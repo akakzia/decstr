@@ -53,7 +53,15 @@ class GoalSampler:
                 # initialize empty buckets, the last one contains all
                 self.buckets = dict(zip(range(self.num_buckets), [[] for _ in range(self.num_buckets)]))
             else:
-                self.buckets = buckets
+                self.buckets = dict()
+                for k in list(buckets.keys())[:-1]:
+                    self.buckets[k] = [self.g_str_to_oracle_id[str(np.array(g))] for g in buckets[k]]
+                self.discovered_goals_oracle_id = []
+                for k in self.buckets.keys():
+                    self.discovered_goals_oracle_id += self.buckets[k]
+                self.discovered_goals = self.all_goals[np.array(self.discovered_goals_oracle_id)].tolist()
+                self.discovered_goals_str = [str(np.array(g)) for g in self.discovered_goals]
+
         else:
             self.discovered_goals = []
             self.discovered_goals_str = []
@@ -101,17 +109,17 @@ class GoalSampler:
 
 
     def update(self, episodes):
-        if self.curriculum_learning:
 
-            all_episodes = MPI.COMM_WORLD.gather(episodes, root=0)
+        all_episodes = MPI.COMM_WORLD.gather(episodes, root=0)
 
-            if self.rank == 0:
-                all_episode_list = []
-                for eps in all_episodes:
-                    all_episode_list += eps
-                # logger.info('Len eps' + str(len(all_episode_list)))
-                # find out if new goals were discovered
-                # label each episode with the oracle id of the last ag (to know where to store it in buffers)
+        if self.rank == 0:
+            all_episode_list = []
+            for eps in all_episodes:
+                all_episode_list += eps
+            # logger.info('Len eps' + str(len(all_episode_list)))
+            # find out if new goals were discovered
+            # label each episode with the oracle id of the last ag (to know where to store it in buffers)
+            if not self.curriculum_learning or self.automatic_buckets:
                 for e in episodes:
                     for ag in e['ag']:
                         # check if ag is a new goal
@@ -127,6 +135,7 @@ class GoalSampler:
                 if self.automatic_buckets:
                     self.update_buckets()
 
+            if self.curriculum_learning:
                 # update LP
                 update = False
                 for e in episodes:
@@ -143,14 +152,11 @@ class GoalSampler:
                 if update:
                     self.update_LP()
 
-            self.sync()
-            for e in episodes:
-                last_ag = e['ag'][-1]
-                oracle_id = self.g_str_to_oracle_id[str(last_ag)]
-                e['last_ag_oracle_id'] = oracle_id
-        else:
-            for e in episodes:
-                e['last_ag_oracle_id'] = 0
+        self.sync()
+        for e in episodes:
+            last_ag = e['ag'][-1]
+            oracle_id = self.g_str_to_oracle_id[str(last_ag)]
+            e['last_ag_oracle_id'] = oracle_id
 
         return episodes
 

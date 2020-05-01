@@ -40,8 +40,9 @@ class RolloutWorker:
                 ag_new = observation_new['achieved_goal']
                 ep_success = info['is_success']
 
+                # USE THIS FOR DEBUG
                 if str(ag_new) not in self.goal_sampler.valid_goals_str:
-                    animated = True
+                    # animated = True
                     stop = 1
 
                 # append rollouts
