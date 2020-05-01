@@ -211,7 +211,11 @@ class GoalSampler:
             succ_fail_per_bucket = [[] for _ in range(self.num_buckets)]
             for k in self.buckets.keys():
                 for sf in np.flip(self.successes_and_failures, axis=0):
-                    if sf[2:].tolist() in self.buckets[k]:
+                    if self.use_pairs:
+                        end = sf[2:].tolist()
+                    else:
+                        end = sf[-1]
+                    if end in self.buckets[k]:
                         succ_fail_per_bucket[k].append(sf[:2])
                         if len(succ_fail_per_bucket[k]) == self.queue_length:
                             break
