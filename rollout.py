@@ -41,6 +41,7 @@ class RolloutWorker:
                 ep_success = info['is_success']
 
                 if str(ag_new) not in self.goal_sampler.valid_goals_str:
+                    animated = True
                     stop = 1
 
                 # append rollouts
