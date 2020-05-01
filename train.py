@@ -58,61 +58,94 @@ def launch(args):
     # def rollout worker
     rollout_worker = RolloutWorker(env, policy, goal_sampler,  args)
 
+
+
     # start to collect samples
     episode_count = 0
     for epoch in range(args.n_epochs):
         t_init = time.time()
+        # setup time_tracking
+        time_dict = dict(goal_sampler=0,
+                         rollout=0,
+                         gs_update=0,
+                         store=0,
+                         norm_update=0,
+                         policy_train=0,
+                         lp_update=0,
+                         eval=0,
+                         epoch=0)
+
         if rank==0: logger.info('\n\nEpoch #{}'.format(epoch))
         for _ in range(args.n_cycles):
-            print(rank)
             # sample goal
-            goals, self_eval = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False)
+            t_i = time.time()
+            inits, goals, self_eval = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False)
+            time_dict['goal_sampler'] += time.time() - t_i
 
             # collect episodes
-            episodes = rollout_worker.generate_rollout(goals=goals,
+            t_i = time.time()
+            episodes = rollout_worker.generate_rollout(inits=inits,
+                                                       goals=goals,
                                                        self_eval=self_eval,
                                                        true_eval=False)
+            time_dict['rollout'] += time.time() - t_i
 
             # update goal sampler (add new discovered goals to the list
             # label episodes with the id of the last ag
-            episodes = goal_sampler.update(episodes)
+            t_i = time.time()
+            episodes = goal_sampler.update(episodes, episode_count)
+            time_dict['gs_update'] += time.time() - t_i
 
             # store episodes
+            t_i = time.time()
             policy.store(episodes)
+            time_dict['store'] += time.time() - t_i
 
             # update normalizer
+            t_i = time.time()
             for e in episodes:
                 policy._update_normalizer(e)
+            time_dict['norm_update'] += time.time() - t_i
 
             # train policy
+            t_i = time.time()
             for _ in range(args.n_batches):
                 policy.train()
+            time_dict['policy_train'] += time.time() - t_i
 
             episode_count += args.num_rollouts_per_mpi * args.num_workers
 
-        t_epoch = time.time() - t_init
-        t_total = time.time() - t_total_init
+        t_i = time.time()
+        goal_sampler.update_LP()
+        time_dict['lp_update'] += time.time() - t_i
+        time_dict['epoch'] += time.time() -t_init
+        time_dict['total'] = time.time() - t_total_init
+
         if args.evaluations:
+            t_i = time.time()
             if rank==0: logger.info('\tRunning eval ..')
             eval_goals = goal_sampler.valid_goals
-            episodes = rollout_worker.generate_rollout(goals=eval_goals,
+            episodes = rollout_worker.generate_rollout(inits=[None] * len(eval_goals),
+                                                       goals=eval_goals,
                                                        self_eval=True,
                                                        true_eval=True)
 
             results = np.array([str(e['g'][0]) == str(e['ag'][-1]) for e in episodes]).astype(np.int)
             all_results = MPI.COMM_WORLD.gather(results, root=0)
+            time_dict['eval'] += time.time() - t_i
+
             if rank == 0:
                 av_res = np.array(all_results).mean(axis=0)
                 global_sr = np.mean(av_res)
-                log_and_save(logdir, goal_sampler, epoch, episode_count, av_res, global_sr, t_epoch, t_total)
+                log_and_save(logdir, goal_sampler, epoch, episode_count, av_res, global_sr,time_dict)
                 if epoch % args.save_freq == 0:
                     policy.save(model_path, epoch)
                     goal_sampler.save_bucket_contents(bucket_path, epoch)
                 if rank==0: logger.info('\tEpoch #{}: SR: {}'.format(epoch, global_sr))
 
 
-def log_and_save( logdir, goal_sampler, epoch, episode_count, av_res, global_sr, t_epoch, t_total):
-    goal_sampler.save(logdir, epoch, episode_count, av_res, global_sr, t_epoch, t_total)
+def log_and_save( logdir, goal_sampler, epoch, episode_count, av_res, global_sr, time_dict):
+    goal_sampler.save(logdir, epoch, episode_count, av_res, global_sr, time_dict)
     for k, l in goal_sampler.stats.items():
         logger.record_tabular(k, l[-1])
     logger.dump_tabular()

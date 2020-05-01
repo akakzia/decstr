@@ -14,11 +14,11 @@ class RolloutWorker:
         self.biased_init = args.biased_init
         self.goal_sampler = goal_sampler
 
-    def generate_rollout(self, goals, self_eval, true_eval, animated=False):
+    def generate_rollout(self, inits, goals, self_eval, true_eval, animated=False):
 
         episodes = []
         for i in range(goals.shape[0]):
-            observation = self.env.unwrapped.reset_goal(np.array(goals[i]), eval=true_eval)
+            observation = self.env.unwrapped.reset_goal(np.array(goals[i]), init=inits[i], eval=true_eval)
             obs = observation['observation']
             ag = observation['achieved_goal']
             g = observation['desired_goal']
