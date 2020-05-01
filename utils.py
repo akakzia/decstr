@@ -1,95 +1,80 @@
 import numpy as np
-import torch
 from datetime import datetime
 import itertools
 import os
 import json
-import random
-from mpi4py import MPI
-from queues import CompetenceQueue
 
 
-def hard_update(target, source):
-    for target_param, param in zip(target.parameters(), source.parameters()):
-        target_param.data.copy_(param.data)
+# def rollout(agent, animated=False):
+#     ep_obs, ep_ag, ep_g, ep_actions, ep_success = [], [], [], [], []
+#     eval = False
+#     nb_buckets = agent.num_buckets
+#     bucket = 0
+#     #  Desired goal selection according to params
+#     if agent.args.curriculum_learning:
+#         if agent.args.automatic_buckets and ((np.array([len(bucket) < 1 for bucket in agent.buckets.values()])).any() or np.random.uniform() < 0.2):
+#             # Randomly select a goal among all valid and non valid goals
+#             goal = agent.goals[np.random.choice(np.arange(len(agent.goals)))]
+#         else:
+#             eval = True if np.random.random() < 0.1 else False
+#             # select goal according to LP probability
+#             if eval:
+#                 bucket = np.random.choice(np.arange(nb_buckets))
+#                 goal = agent.buckets[bucket][np.random.choice(len(agent.buckets[bucket]))]
+#             else:
+#                 bucket = np.random.choice(np.arange(nb_buckets), 1, p=agent.p)[0]
+#                 goal = agent.buckets[bucket][np.random.choice(len(agent.buckets[bucket]))]
+#     else:
+#         flatten = lambda l: [item for sublist in list(agent.buckets.values()) for item in sublist]
+#         goal = random.choice(flatten(agent.buckets))
+#     observation = agent.env.unwrapped.reset_goal(np.array(goal), biased_init=agent.args.biased_init, eval=eval)
+#     obs = observation['observation']
+#     ag = observation['achieved_goal']
+#     g = observation['desired_goal']
+#     # start to collect samples
+#     for t in range(agent.env_params['max_timesteps']):
+#         # if an ag is not encountred by all workers, add it
+#         if tuple(ag) not in sum(MPI.COMM_WORLD.allgather(agent.encountred_goals), []):
+#             agent.encountred_goals.append(tuple(ag))
+#             # if the encountred goal is new and was not predefined as a valid_goal, then add it
+#             if tuple(ag) not in agent.valid_goals:
+#                 agent.valid_goals.append(tuple(ag))
+#                 agent.per_goal_competence_computers.append(CompetenceQueue(window=agent.args.queue_length))
+#         with torch.no_grad():
+#             obs_norm = agent.o_norm.normalize(obs)
+#             g_norm = torch.tensor(agent.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
+#             ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
+#             if agent.architecture == 'deepsets':
+#                 obs_tensor = torch.tensor(obs_norm, dtype=torch.float32).unsqueeze(0)
+#                 agent.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, eval=eval)
+#                 action = agent.model.pi_tensor.numpy()[0]
+#             elif agent.architecture == 'disentangled':
+#                 z_ag = agent.configuration_network(ag_norm)[0]
+#                 z_g = agent.configuration_network(g_norm)[0]
+#                 input_tensor = torch.tensor(np.concatenate([obs_norm, z_ag, z_g]), dtype=torch.float32).unsqueeze(0)
+#                 action = agent._select_actions(input_tensor, eval=eval)
+#             else:
+#                 input_tensor = agent._preproc_inputs(obs, g)  # PROCESSING TO CHECK
+#                 action = agent._select_actions(input_tensor, eval=eval)
+#         # feed the actions into the environment
+#         if animated:
+#             agent.env.render()
+#         observation_new, _, _, info = agent.env.step(action)
+#         obs_new = observation_new['observation']
+#         ag_new = observation_new['achieved_goal']
+#         ep_success = info['is_success']  #
+#         # append rollouts
+#         ep_obs.append(obs.copy())
+#         ep_ag.append(ag.copy())
+#         ep_g.append(g.copy())
+#         ep_actions.append(action.copy())
+#         # re-assign the observation
+#         obs = obs_new
+#         ag = ag_new
+#     ep_obs.append(obs.copy())
+#     ep_ag.append(ag.copy())
+#     return ep_obs, ep_ag, ep_g, ep_actions, ep_success, eval, g, bucket
 
-
-def rollout(agent, animated=False):
-    ep_obs, ep_ag, ep_g, ep_actions, ep_success = [], [], [], [], []
-    eval = False
-    nb_buckets = agent.num_buckets
-    bucket = 0
-    #  Desired goal selection according to params
-    if agent.args.curriculum_learning:
-        if agent.args.automatic_buckets and ((np.array([len(bucket) < 1 for bucket in agent.buckets.values()])).any() or np.random.uniform() < 0.2):
-            # Randomly select a goal among all valid and non valid goals
-            goal = agent.goals[np.random.choice(np.arange(len(agent.goals)))]
-        else:
-            eval = True if np.random.random() < 0.1 else False
-            # select goal according to LP probability
-            if eval:
-                bucket = np.random.choice(np.arange(nb_buckets))
-                goal = agent.buckets[bucket][np.random.choice(len(agent.buckets[bucket]))]
-            else:
-                bucket = np.random.choice(np.arange(nb_buckets), 1, p=agent.p)[0]
-                goal = agent.buckets[bucket][np.random.choice(len(agent.buckets[bucket]))]
-    else:
-        flatten = lambda l: [item for sublist in list(agent.buckets.values()) for item in sublist]
-        goal = random.choice(flatten(agent.buckets))
-    observation = agent.env.reset_goal(np.array(goal), biased_init=agent.args.biased_init, eval=eval)
-    obs = observation['observation']
-    ag = observation['achieved_goal']
-    g = observation['desired_goal']
-    # start to collect samples
-    for t in range(agent.env_params['max_timesteps']):
-        # if an ag is not encountred by all workers, add it
-        if tuple(ag) not in sum(MPI.COMM_WORLD.allgather(agent.encountred_goals), []):
-            agent.encountred_goals.append(tuple(ag))
-            # if the encountred goal is new and was not predefined as a valid_goal, then add it
-            if tuple(ag) not in agent.valid_goals:
-                agent.valid_goals.append(tuple(ag))
-                agent.per_goal_competence_computers.append(CompetenceQueue(window=agent.args.queue_length))
-        with torch.no_grad():
-            obs_norm = agent.o_norm.normalize(obs)
-            g_norm = torch.tensor(agent.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
-            ag_norm = torch.tensor(agent.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
-            if agent.architecture == 'deepsets':
-                obs_tensor = torch.tensor(obs_norm, dtype=torch.float32).unsqueeze(0)
-                agent.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, eval=eval)
-                action = agent.model.pi_tensor.numpy()[0]
-            elif agent.architecture == 'disentangled':
-                z_ag = agent.configuration_network(ag_norm)[0]
-                z_g = agent.configuration_network(g_norm)[0]
-                input_tensor = torch.tensor(np.concatenate([obs_norm, z_ag, z_g]), dtype=torch.float32).unsqueeze(0)
-                action = agent._select_actions(input_tensor, eval=eval)
-            else:
-                input_tensor = agent._preproc_inputs(obs, g)  # PROCESSING TO CHECK
-                action = agent._select_actions(input_tensor, eval=eval)
-        # feed the actions into the environment
-        if animated:
-            agent.env.render()
-        observation_new, _, _, info = agent.env.step(action)
-        obs_new = observation_new['observation']
-        ag_new = observation_new['achieved_goal']
-        ep_success = info['is_success']  #
-        # append rollouts
-        ep_obs.append(obs.copy())
-        ep_ag.append(ag.copy())
-        ep_g.append(g.copy())
-        ep_actions.append(action.copy())
-        # re-assign the observation
-        obs = obs_new
-        ag = ag_new
-    ep_obs.append(obs.copy())
-    ep_ag.append(ag.copy())
-    return ep_obs, ep_ag, ep_g, ep_actions, ep_success, eval, g, bucket
-
-
-def load_models(path, actor, critic):
-    o_mean, o_std, g_mean, g_std, model_actor, model_critic = torch.load(path, map_location=lambda storage, loc: storage)
-    actor.load_state_dict(model_actor)
-    critic.load_state_dict(model_critic)
-    return o_mean, o_std, g_mean, g_std
 
 
 def above_to_close(vector):
@@ -140,6 +125,22 @@ def one_above_two(vector):
 stack_three_list = [(1., 1., 0., 1., 0., 0., 1., 0., 0.), (1., 0., 1., 0., 1., 0., 0., 0., 1.),
                     (1., 1., 0., 0., 1., 1., 0., 0., 0.), (1., 0., 1., 1., 0., 0., 0., 1., 0.),
                     (0., 1., 1., 0., 0., 1., 0., 0., 1.), (0., 1., 1., 0., 0., 0., 1., 1., 0.)]
+
+
+def generate_all_goals_in_goal_space():
+    goals = []
+    for a in [0, 1]:
+        for b in [0, 1]:
+            for c in [0, 1]:
+                for d in [0, 1]:
+                    for e in [0, 1]:
+                        for f in [0, 1]:
+                            for g in [0, 1]:
+                                for h in [0, 1]:
+                                    for i in [0, 1]:
+                                        goals.append([a, b, c, d, e, f, g, h, i])
+
+    return np.array(goals)
 
 
 def generate_goals(nb_objects=3, sym=1, asym=1):
@@ -232,19 +233,19 @@ def init_storage(args):
     if not os.path.exists(args.save_dir):
         os.mkdir(args.save_dir)
     # path to save the model
-    model_path = os.path.join(args.save_dir, args.env_name + '_' + args.folder_prefix)
+    logdir = os.path.join(args.save_dir, args.env_name + '_' + args.folder_prefix)
     if args.curriculum_learning:
-        model_path = os.path.join(args.save_dir, '{}_curriculum_{}'.format(datetime.now(), args.architecture))
+        logdir = os.path.join(args.save_dir, '{}_curriculum_{}'.format(datetime.now(), args.architecture))
         if args.deepsets_attention:
-            model_path += '_attention'
+            logdir += '_attention'
         if args.double_critic_attention:
-            model_path += '_double'
+            logdir += '_double'
     # path to save evaluations
-    eval_path = os.path.join(model_path, 'eval')
+    model_path = os.path.join(logdir, 'models')
+    if not os.path.exists(logdir):
+        os.mkdir(logdir)
     if not os.path.exists(model_path):
         os.mkdir(model_path)
-    if not os.path.exists(eval_path):
-        os.mkdir(eval_path)
-    with open(os.path.join(model_path, 'config.json'), 'w') as f:
+    with open(os.path.join(logdir, 'config.json'), 'w') as f:
         json.dump(vars(args), f, indent=2)
-    return model_path, eval_path
+    return logdir, model_path

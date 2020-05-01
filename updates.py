@@ -219,7 +219,7 @@ def update_deepsets(model, policy_optim, critic_optim, alpha, log_alpha, target_
     critic_optim.step()
 
     critic_optim.zero_grad()
-    qf2_loss.backward()
+    # qf2_loss.backward()
     if args.deepsets_attention:
         sync_grads(model.attention_critic_2)
     sync_grads(model.single_phi_critic)

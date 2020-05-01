@@ -1,7 +1,48 @@
 from mpi4py import MPI
 import numpy as np
 import torch
+import subprocess
+import sys
+import os
+from subprocess import CalledProcessError
 
+
+def fork(num_cpu):
+    # Fork for multi-CPU MPI implementation.
+    if num_cpu > 1:
+        try:
+            whoami = mpi_fork(num_cpu, ['--bind-to', 'core:overload-allowed'])
+            # whoami = mpi_fork(num_cpu, ['--bind-to', 'core:overload-allowed'])
+        except CalledProcessError:
+            # fancy version of mpi call failed, try simple version
+            whoami = mpi_fork(num_cpu)
+
+        if whoami == 'parent':
+            sys.exit(0)
+    rank = MPI.COMM_WORLD.Get_rank()
+    return rank
+
+def mpi_fork(n, bind_to_core=False):
+    """Re-launches the current script with workers
+    Returns "parent" for original parent, "child" for MPI children
+    """
+    if n<=1:
+        return "child"
+    if os.getenv("IN_MPI") is None:
+        env = os.environ.copy()
+        env.update(
+            MKL_NUM_THREADS="1",
+            OMP_NUM_THREADS="1",
+            IN_MPI="1"
+        )
+        args = ["mpirun", "-np", str(n)]
+        if bind_to_core:
+            args += ["-bind-to", "core"]
+        args += [sys.executable] + sys.argv
+        subprocess.check_call(args, env=env)
+        return "parent"
+    else:
+        return "child"
 
 # sync_networks across the different cores
 def sync_networks(network):

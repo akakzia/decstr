@@ -16,31 +16,24 @@ class her_sampler:
         T = episode_batch['actions'].shape[1]
         rollout_batch_size = episode_batch['actions'].shape[0]
         batch_size = batch_size_in_transitions
+
         # select which rollouts and which timesteps to be used
         episode_idxs = np.random.randint(0, rollout_batch_size, batch_size)
         t_samples = np.random.randint(T, size=batch_size)
         transitions = {key: episode_batch[key][episode_idxs, t_samples].copy() for key in episode_batch.keys()}
+
         # her idx
         her_indexes = np.where(np.random.uniform(size=batch_size) < self.future_p)
         future_offset = np.random.uniform(size=batch_size) * (T - t_samples)
         future_offset = future_offset.astype(int)
         future_t = (t_samples + 1 + future_offset)[her_indexes]
-        # replace go with achieved goal
+
+        # replace goal with achieved goal
         future_ag = episode_batch['ag'][episode_idxs[her_indexes], future_t]
         transitions['g'][her_indexes] = future_ag
         # to get the params to re-compute reward
         # transitions['r'] = np.expand_dims(self.reward_func(transitions['ag_next'], transitions['g'], None), 1)
         transitions['r'] = np.expand_dims(np.array([self.reward_func(ag_next, g, None) for ag_next, g in zip(transitions['ag_next'],
                                                                                         transitions['g'])]), 1)
-        # Filtered-HER
-        """filter_indexes = np.arange(batch_size)
-        delete_indexes = np.array([])
-        for i, reward in enumerate(transitions['r'][1:]):
-            if (transitions['g'][i] == transitions['g'][i+1]).all():
-                if transitions['r'][i] > 0.:
-                    batch_size -= 1
-                    delete_indexes = np.concatenate((delete_indexes, [i+1]))
-        filter_indexes = np.delete(filter_indexes, delete_indexes)
-        transitions = {k: transitions[k][filter_indexes].reshape(batch_size, *transitions[k].shape[1:]) for k in transitions.keys()}"""
 
         return transitions

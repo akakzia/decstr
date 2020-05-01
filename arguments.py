@@ -1,4 +1,6 @@
 import argparse
+import numpy as np
+
 
 """
 Here are the param for the training
@@ -11,7 +13,7 @@ def get_args():
     # the environment setting
     parser.add_argument('--env-name', type=str, default='FetchManipulate3Objects-v0', help='the environment name')
     parser.add_argument('--agent', type=str, default='SAC', help='the agent name')
-    parser.add_argument('--n-epochs', type=int, default=10, help='the number of epochs to train the agent')
+    parser.add_argument('--n-epochs', type=int, default=100, help='the number of epochs to train the agent')
     parser.add_argument('--n-cycles', type=int, default=5, help='the times to collect samples per epoch')
     parser.add_argument('--n-batches', type=int, default=1, help='the times to update the network')
     parser.add_argument('--biased-init', type=bool, default=True, help='use biased environment initializations')
@@ -21,12 +23,11 @@ def get_args():
     parser.add_argument('--evaluations', type=bool, default=True, help='do evaluation at the end of the epoch w/ frequency')
     parser.add_argument('--save-freq', type=int, default=10, help='the interval that save the trajectory')
 
-    parser.add_argument('--seed', type=int, default=123, help='random seed')
+    parser.add_argument('--seed', type=int, default=np.random.randint(1e6), help='random seed')
     parser.add_argument('--num-workers', type=int, default=1, help='the number of cpus to collect samples')
     parser.add_argument('--replay-strategy', type=str, default='future', help='the HER strategy')
     parser.add_argument('--clip-return', type=float, default=50, help='if clip the returns')
-    parser.add_argument('--save-dir', type=str, default='ignoramus/',
-                        help='the path to save the models')
+    parser.add_argument('--save-dir', type=str, default='ignoramus/', help='the path to save the models')
     parser.add_argument('--folder-prefix', type=str, default='_deepsets02', help='to discriminate the model')
 
     parser.add_argument('--noise-eps', type=float, default=0.2, help='noise eps')
