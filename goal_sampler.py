@@ -24,8 +24,8 @@ class GoalSampler:
         all_goals = generate_all_goals_in_goal_space().astype(np.float32)
         valid_goals = []
         for k in buckets.keys():
-            if k < 4:
-                valid_goals += buckets[k]
+            # if k < 4:
+            valid_goals += buckets[k]
         self.valid_goals = np.array(valid_goals)
         self.all_goals = np.array(all_goals)
         self.num_goals = self.all_goals.shape[0]
@@ -56,7 +56,7 @@ class GoalSampler:
                 self.buckets = dict(zip(range(self.num_buckets), [[] for _ in range(self.num_buckets)]))
             else:
                 self.buckets = dict()
-                for k in list(buckets.keys())[:-1]:
+                for k in list(buckets.keys()):
                     self.buckets[k] = [self.g_str_to_oracle_id[str(np.array(g))] for g in buckets[k]]
                 self.discovered_goals_oracle_id = []
                 for k in self.buckets.keys():
