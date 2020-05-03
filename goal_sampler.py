@@ -207,7 +207,8 @@ class GoalSampler:
             j += l
 
     def update_LP(self):
-
+        # Debug
+        print(self.rank, self.successes_and_failures)
         if len(self.successes_and_failures) > 0:
             # organize the successes and failures per bucket
             succ_fail_per_bucket = [[] for _ in range(self.num_buckets)]
@@ -223,6 +224,7 @@ class GoalSampler:
                             break
 
             # compute C, LP per bucket
+            print('Computing LP', self.rank, succ_fail_per_bucket)
             for k in self.buckets.keys():
                 n_points = len(succ_fail_per_bucket[k])
                 if n_points > 4:
