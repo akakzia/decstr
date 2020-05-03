@@ -134,11 +134,12 @@ class GoalSampler:
             all_episode_list = []
             for eps in all_episodes:
                 all_episode_list += eps
+            print('Total episodes: ', len(all_episode_list))
             # logger.info('Len eps' + str(len(all_episode_list)))
             # find out if new goals were discovered
             # label each episode with the oracle id of the last ag (to know where to store it in buffers)
             if not self.curriculum_learning or self.automatic_buckets:
-                for e in episodes:
+                for e in all_episode_list:
                     # if we're looking for pairs
                     id_ag_0 = self.g_str_to_oracle_id[str(e['ag'][0])]
 
@@ -163,8 +164,7 @@ class GoalSampler:
 
             if self.curriculum_learning:
                 # update list of successes and failures
-                print('Number of episodes in computing LP: ', self.rank, len(episodes))
-                for e in episodes:
+                for e in all_episode_list:
                     if e['self_eval']:
                         oracle_id_init = self.g_str_to_oracle_id[str(e['ag'][0])]
                         oracle_id = self.g_str_to_oracle_id[str(e['g'][0])]
