@@ -18,7 +18,7 @@ class GoalSampler:
         self.rank = MPI.COMM_WORLD.Get_rank()
         self.use_pairs = args.use_pairs
 
-        self.epsilon = 0.2
+        self.epsilon = args.curriculum_eps
 
         buckets = generate_goals(nb_objects=3, sym=1, asym=1)
         if not self.automatic_buckets: self.num_buckets = len(buckets)
@@ -104,7 +104,7 @@ class GoalSampler:
                     self_eval = False
                 else:
                     # decide whether to self evaluate
-                    self_eval = True if np.random.random() < 0.1 else False
+                    self_eval = True if np.random.random() < 0.2 else False
                     # if self-evaluation then sample randomly from discovered goals
                     if self_eval:
                         # goal_ids = np.random.choice(range(len(self.discovered_goals)), size=n_goals)

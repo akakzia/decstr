@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
-from itertools import permutations, combinations
+from itertools import permutations
 import numpy as np
 
 LOG_SIG_MAX = 2
@@ -82,7 +82,7 @@ class RhoActor(nn.Module):
     def __init__(self, inp, out, action_space=None):
         super(RhoActor, self).__init__()
         self.linear1 = nn.Linear(inp, 256)
-        self.linear2 = nn.Linear(256, 256)
+        #self.linear2 = nn.Linear(256, 256)
         self.mean_linear = nn.Linear(256, out)
         self.log_std_linear = nn.Linear(256, out)
 
@@ -98,7 +98,7 @@ class RhoActor(nn.Module):
 
     def forward(self, x):
         x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
+        #x = F.relu(self.linear2(x))
 
         mean = self.mean_linear(x)
         log_std = self.log_std_linear(x)
@@ -148,22 +148,22 @@ class RhoCritic(nn.Module):
     def __init__(self, inp, out, action_space=None):
         super(RhoCritic, self).__init__()
         self.linear1 = nn.Linear(inp, 256)
-        self.linear2 = nn.Linear(256, 256)
+        #self.linear2 = nn.Linear(256, 256)
         self.linear3 = nn.Linear(256, out)
 
         self.linear4 = nn.Linear(inp, 256)
-        self.linear5 = nn.Linear(256, 256)
+        #self.linear5 = nn.Linear(256, 256)
         self.linear6 = nn.Linear(256, out)
 
         self.apply(weights_init_)
 
     def forward(self, inp1, inp2):
         x1 = F.relu(self.linear1(inp1))
-        x1 = F.relu(self.linear2(x1))
+        #x1 = F.relu(self.linear2(x1))
         x1 = self.linear3(x1)
 
         x2 = F.relu(self.linear4(inp2))
-        x2 = F.relu(self.linear5(x2))
+        #x2 = F.relu(self.linear5(x2))
         x2 = self.linear6(x2)
 
         return x1, x2
@@ -180,7 +180,7 @@ class DeepSetSAC:
         self.dim_goal = env_params['goal']
         self.dim_act = env_params['action']
         self.num_blocks = 3
-        self.n_permutations = len([x for x in combinations(range(self.num_blocks), 2)])
+        self.n_permutations = len([x for x in permutations(range(self.num_blocks), 2)])
 
         # Whether to use attention networks or concatenate goal to input
         self.use_attention = use_attention
@@ -259,8 +259,8 @@ class DeepSetSAC:
             obj_input_actor = [obs_objects[i] for i in range(self.num_blocks)]
 
         # Parallelization by stacking input tensors
-        #input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in permutations(obj_input_actor, 2)])
-        input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in combinations(obj_input_actor, 2)])
+        input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in permutations(obj_input_actor, 2)])
+        #input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in combinations(obj_input_actor, 2)])
 
         output_phi_actor = self.single_phi_actor(input_actor).sum(dim=0)
         # self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
@@ -308,8 +308,8 @@ class DeepSetSAC:
             obj_input = [obs_objects[i] for i in range(self.num_blocks)]
 
         # Parallelization by stacking input tensors
-        #input_actor = torch.stack([torch.cat([ag, body_input, x[0], x[1]], dim=1) for x in permutations(obj_input, 2)])
-        input_actor = torch.stack([torch.cat([ag, body_input, x[0], x[1]], dim=1) for x in combinations(obj_input, 2)])
+        input_actor = torch.stack([torch.cat([ag, body_input, x[0], x[1]], dim=1) for x in permutations(obj_input, 2)])
+        #input_actor = torch.stack([torch.cat([ag, body_input, x[0], x[1]], dim=1) for x in combinations(obj_input, 2)])
 
         output_phi_actor = self.single_phi_actor(input_actor).sum(dim=0)
         # self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
