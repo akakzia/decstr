@@ -127,14 +127,12 @@ class GoalSampler:
 
 
     def update(self, episodes, t):
-        print('Number of episodes per mpi: ', self.rank, len(episodes))
         all_episodes = MPI.COMM_WORLD.gather(episodes, root=0)
 
         if self.rank == 0:
             all_episode_list = []
             for eps in all_episodes:
                 all_episode_list += eps
-            print('Total episodes: ', len(all_episode_list))
             # logger.info('Len eps' + str(len(all_episode_list)))
             # find out if new goals were discovered
             # label each episode with the oracle id of the last ag (to know where to store it in buffers)
