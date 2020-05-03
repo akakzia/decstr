@@ -104,7 +104,7 @@ class GoalSampler:
                     self_eval = False
                 else:
                     # decide whether to self evaluate
-                    self_eval = True if np.random.random() < 0.2 else False
+                    self_eval = True if np.random.random() < 0.1 else False
                     # if self-evaluation then sample randomly from discovered goals
                     if self_eval:
                         # goal_ids = np.random.choice(range(len(self.discovered_goals)), size=n_goals)
@@ -270,7 +270,8 @@ class GoalSampler:
             p[np.argmax(self.p)] -= p.sum() - 1
         elif p.sum() < 1:
             p[-1] = 1 - p[:-1].sum()
-        buckets = np.random.choice(range(self.num_buckets), p=p, size=batch_size)
+        # buckets = np.random.choice(range(self.num_buckets), p=p, size=batch_size)
+        buckets = np.random.choice(range(self.num_buckets), p=p) * np.ones(batch_size)
         goal_ids = []
         for b in buckets:
             if len(self.buckets[b]) > 0:
