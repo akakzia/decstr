@@ -127,7 +127,7 @@ class GoalSampler:
 
 
     def update(self, episodes, t):
-
+        print('Number of episodes per mpi: ', self.rank, len(episodes))
         all_episodes = MPI.COMM_WORLD.gather(episodes, root=0)
 
         if self.rank == 0:
@@ -163,6 +163,7 @@ class GoalSampler:
 
             if self.curriculum_learning:
                 # update list of successes and failures
+                print('Number of episodes in computing LP: ', self.rank, len(episodes))
                 for e in episodes:
                     if e['self_eval']:
                         oracle_id_init = self.g_str_to_oracle_id[str(e['ag'][0])]
@@ -207,8 +208,7 @@ class GoalSampler:
             j += l
 
     def update_LP(self):
-        # Debug
-        print(self.rank, self.successes_and_failures)
+
         if len(self.successes_and_failures) > 0:
             # organize the successes and failures per bucket
             succ_fail_per_bucket = [[] for _ in range(self.num_buckets)]
@@ -224,7 +224,6 @@ class GoalSampler:
                             break
 
             # compute C, LP per bucket
-            print('Computing LP', self.rank, succ_fail_per_bucket)
             for k in self.buckets.keys():
                 n_points = len(succ_fail_per_bucket[k])
                 if n_points > 4:
