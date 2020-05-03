@@ -40,8 +40,8 @@ def launch(args):
         torch.cuda.manual_seed(args.seed + MPI.COMM_WORLD.Get_rank())
 
     # get saving paths
-    logdir, model_path, bucket_path = init_storage(args)
     if rank == 0:
+        logdir, model_path, bucket_path = init_storage(args)
         logger.configure(dir=logdir)
 
     args.env_params = get_env_params(env)
