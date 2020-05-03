@@ -80,9 +80,10 @@ if __name__ == '__main__':
     rollout_worker = RolloutWorker(env, policy, goal_sampler,  args)
 
     eval_goals = goal_sampler.valid_goals
+    inits = [None] * len(eval_goals)
     all_results = []
     for i in range(num_eval):
-        episodes = rollout_worker.generate_rollout(eval_goals, self_eval=True, true_eval=True, animated=True)
+        episodes = rollout_worker.generate_rollout(inits, eval_goals, self_eval=True, true_eval=True, animated=True)
         results = np.array([str(e['g'][0]) == str(e['ag'][-1]) for e in episodes]).astype(np.int)
         all_results.append(results)
 

@@ -21,6 +21,7 @@ class GoalSampler:
         self.epsilon = 0.2
 
         buckets = generate_goals(nb_objects=3, sym=1, asym=1)
+        if not self.automatic_buckets: self.num_buckets = len(buckets)
         all_goals = generate_all_goals_in_goal_space().astype(np.float32)
         valid_goals = []
         for k in buckets.keys():
@@ -106,21 +107,22 @@ class GoalSampler:
                     self_eval = True if np.random.random() < 0.1 else False
                     # if self-evaluation then sample randomly from discovered goals
                     if self_eval:
-                        goal_ids = np.random.choice(range(len(self.discovered_goals)), size=n_goals)
-                        goals = np.array(self.discovered_goals)[goal_ids]
+                        # goal_ids = np.random.choice(range(len(self.discovered_goals)), size=n_goals)
+                        # goals = np.array(self.discovered_goals)[goal_ids]
+                        buckets = np.random.choice(range(self.num_buckets), size=n_goals)
                     # if no self evaluation
                     else:
                         buckets = np.random.choice(range(self.num_buckets), p=self.p, size=n_goals)
-                        goals = []
-                        for i_b, b in enumerate(buckets):
-                            if self.use_pairs:
-                                ind = np.random.choice(range(len(self.buckets[b])))
-                                bucket = self.buckets[b][ind]
-                                inits[i_b] = self.all_goals[bucket[0]]
-                                goals.append(self.all_goals[bucket[1]])
-                            else:
-                                goals.append(self.all_goals[np.random.choice(self.buckets[b])])
-                        goals = np.array(goals)
+                    goals = []
+                    for i_b, b in enumerate(buckets):
+                        if self.use_pairs:
+                            ind = np.random.choice(range(len(self.buckets[b])))
+                            bucket = self.buckets[b][ind]
+                            inits[i_b] = self.all_goals[bucket[0]]
+                            goals.append(self.all_goals[bucket[1]])
+                        else:
+                            goals.append(self.all_goals[np.random.choice(self.buckets[b])])
+                    goals = np.array(goals)
         return inits, goals, self_eval
 
 
@@ -226,13 +228,15 @@ class GoalSampler:
                 if n_points > 4:
                     sf = np.array(succ_fail_per_bucket[k])
                     self.C[k] = np.mean(sf[n_points // 2:, 1])
-                    self.LP[k] = np.abs(np.mean(sf[n_points // 2:, 1]) - np.mean(sf[: n_points // 2, 1]))
+                    self.LP[k] = np.abs(np.sum(sf[n_points // 2:, 1]) - np.sum(sf[: n_points // 2, 1])) / n_points
+                    # self.LP[k] = np.abs(np.mean(sf[n_points // 2:, 1]) - np.mean(sf[: n_points // 2, 1]))
 
             # compute p
             if self.LP.sum() == 0:
                 self.p = np.ones([self.num_buckets]) / self.num_buckets
             else:
-                self.p = self.LP / self.LP.sum()
+                # self.p = self.LP / self.LP.sum()
+                self.p = self.epsilon * (1 - self.C) / (1 - self.C).sum() + (1 - self.epsilon) * self.LP / self.LP.sum()
 
             if self.p.sum() > 1:
                 self.p[np.argmax(self.p)] -= self.p.sum() - 1
@@ -257,10 +261,12 @@ class GoalSampler:
     def build_batch(self, batch_size):
         # only consider buckets filled with discovered goals
         LP = self.LP
+        C = self.C
         if LP.sum() == 0:
             p = np.ones([self.num_buckets]) / self.num_buckets
         else:
-            p = self.epsilon * np.ones([self.num_buckets]) / self.num_buckets + (1 - self.epsilon) * LP / LP.sum()
+            # p = self.epsilon * np.ones([self.num_buckets]) / self.num_buckets + (1 - self.epsilon) * LP / LP.sum()
+            p = self.epsilon * (1 - C) / (1 - C).sum() + (1 - self.epsilon) * LP / LP.sum()
         if p.sum() > 1:
             p[np.argmax(self.p)] -= p.sum() - 1
         elif p.sum() < 1:
