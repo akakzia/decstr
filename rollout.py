@@ -1,9 +1,4 @@
 import numpy as np
-from mpi4py import MPI
-import torch
-
-
-
 
 class RolloutWorker:
     def __init__(self, env, policy, goal_sampler, args):
@@ -29,8 +24,8 @@ class RolloutWorker:
             for t in range(self.env_params['max_timesteps']):
 
                 # run policy
-                noise = self_eval or true_eval
-                action = self.policy.act(obs.copy(), ag.copy(), g.copy(), noise)
+                no_noise = self_eval or true_eval
+                action = self.policy.act(obs.copy(), ag.copy(), g.copy(), no_noise)
 
                 # feed the actions into the environment
                 if animated:
@@ -39,7 +34,6 @@ class RolloutWorker:
                 observation_new, _, _, info = self.env.step(action)
                 obs_new = observation_new['observation']
                 ag_new = observation_new['achieved_goal']
-                ep_success = info['is_success']
 
                 # USE THIS FOR DEBUG
                 # if str(ag_new) not in self.goal_sampler.valid_goals_str:
