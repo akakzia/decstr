@@ -21,6 +21,7 @@ def get_args():
     parser.add_argument('--automatic-buckets', type=bool, default=False, help='automatically generate buckets during training')
     parser.add_argument('--use-pairs', type=bool, default=False, help='use pairs of goals for buckets')
     parser.add_argument('--num-buckets', type=int, default=4, help='number of buckets for automatic generation')
+    parser.add_argument('--n-exploration-episodes', type=int, default=500, help='episodes to fill buffer')
 
     parser.add_argument('--evaluations', type=bool, default=True, help='do evaluation at the end of the epoch w/ frequency')
     parser.add_argument('--save-freq', type=int, default=10, help='the interval that save the trajectory')
@@ -63,7 +64,7 @@ def get_args():
     parser.add_argument('--clip-range', type=float, default=5, help='the clip range')
     parser.add_argument('--demo-length', type=int, default=20, help='the demo length')
     parser.add_argument('--cuda', action='store_true', help='if use gpu do the acceleration')
-    parser.add_argument('--num-rollouts-per-mpi', type=int, default=50, help='the rollouts per mpi')
+    parser.add_argument('--num-rollouts-per-mpi', type=int, default=2, help='the rollouts per mpi')
 
     args = parser.parse_args()
 
