@@ -29,7 +29,8 @@ class RolloutWorker:
             for t in range(self.env_params['max_timesteps']):
 
                 # run policy
-                action = self.policy.act(obs.copy(), ag.copy(), g.copy(), self_eval)
+                noise = self_eval or true_eval
+                action = self.policy.act(obs.copy(), ag.copy(), g.copy(), noise)
 
                 # feed the actions into the environment
                 if animated:

@@ -228,7 +228,7 @@ class DeepSetSAC:
         self.single_phi_target_critic = SinglePhiCritic(dim_phi_critic_input, 256, dim_phi_critic_output)
         self.rho_target_critic = RhoCritic(dim_rho_critic_input, dim_rho_critic_output)
 
-    def policy_forward_pass(self, obs, ag, g, eval=False):
+    def policy_forward_pass(self, obs, ag, g, noise=False):
         self.observation = obs
         self.ag = ag
         self.g = g
@@ -264,7 +264,7 @@ class DeepSetSAC:
 
         output_phi_actor = self.single_phi_actor(input_actor).sum(dim=0)
         # self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
-        if not eval:
+        if not noise:
             self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
         else:
             _, self.log_prob, self.pi_tensor = self.rho_actor.sample(output_phi_actor)

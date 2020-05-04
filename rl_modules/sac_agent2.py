@@ -128,7 +128,7 @@ class SACAgent:
 
 
 
-    def act(self, obs, ag, g, self_eval):
+    def act(self, obs, ag, g, noise):
         with torch.no_grad():
             # normalize policy inputs 
             obs_norm = self.o_norm.normalize(obs)
@@ -137,17 +137,17 @@ class SACAgent:
 
             if self.architecture == 'deepsets':
                 obs_tensor = torch.tensor(obs_norm, dtype=torch.float32).unsqueeze(0)
-                self.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, eval=self_eval)
+                self.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, noise=noise)
                 action = self.model.pi_tensor.numpy()[0]
                 
             elif self.architecture == 'disentangled':
                 z_ag = self.configuration_network(ag_norm)[0]
                 z_g = self.configuration_network(g_norm)[0]
                 input_tensor = torch.tensor(np.concatenate([obs_norm, z_ag, z_g]), dtype=torch.float32).unsqueeze(0)
-                action = self._select_actions(input_tensor, eval=self_eval)
+                action = self._select_actions(input_tensor, noise=noise)
             else:
                 input_tensor = self._preproc_inputs(obs, g)  # PROCESSING TO CHECK
-                action = self._select_actions(input_tensor, eval=self_eval)
+                action = self._select_actions(input_tensor, noise=noise)
                 
         return action
         
@@ -177,8 +177,8 @@ class SACAgent:
         else:
             self._soft_update_target_network(self.critic_target_network, self.critic_network)
 
-    def _select_actions(self, state, eval=False):
-        if not eval:
+    def _select_actions(self, state, noise=False):
+        if not noise:
             action, _, _ = self.actor_network.sample(state)
         else:
             _, _, action = self.actor_network.sample(state)
