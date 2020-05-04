@@ -393,23 +393,22 @@ class FetchManipulateEnv(robot_env.RobotEnv):
         self.sim.set_state(self.initial_state)
 
         # If evaluation mode, generate blocks on the table with no stacks
-        # if eval:
-        # debug for unbiased
-        for i, obj_name in enumerate(self.object_names):
-            object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(obj_name))
-            assert object_qpos.shape == (7,)
-            object_qpos[2] = 0.425
-            object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
-                                                                                 self.obj_range,
-                                                                                 size=2)
-            object_qpos[:2] = object_xpos
+        if eval:
+            for i, obj_name in enumerate(self.object_names):
+                object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(obj_name))
+                assert object_qpos.shape == (7,)
+                object_qpos[2] = 0.425
+                object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
+                                                                                     self.obj_range,
+                                                                                     size=2)
+                object_qpos[:2] = object_xpos
 
-            self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
+                self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
 
-        self.sim.forward()
-        obs = self._get_obs()
+            self.sim.forward()
+            obs = self._get_obs()
 
-        return obs
+            return obs
 
         p_stack_two = 0.7
         if np.random.uniform() > p_stack_two:
