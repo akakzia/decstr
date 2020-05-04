@@ -1,9 +1,9 @@
 import numpy as np
+from mpi4py import MPI
 import env
 import gym
 import os, sys
 from arguments import get_args
-from mpi4py import MPI
 from rl_modules.sac_agent2 import SACAgent
 import random
 import torch
