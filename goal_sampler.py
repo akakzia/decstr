@@ -179,8 +179,10 @@ class GoalSampler:
 
         self.sync()
         for e in episodes:
-            last_ag = e['ag'][-1]
-            oracle_id = self.g_str_to_oracle_id[str(last_ag)]
+            # last_ag = e['ag'][-1]
+            # oracle_id = self.g_str_to_oracle_id[str(last_ag)]
+            g = e['g'][-1]
+            oracle_id = self.g_str_to_oracle_id[str(g)]
             e['last_ag_oracle_id'] = oracle_id
 
         return episodes
