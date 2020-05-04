@@ -35,17 +35,25 @@ class MultiBuffer:
 
     # store the episode
     def store_episode(self, episode_batch):
-        batch_size = len(episode_batch)
+        # batch_size = len(episode_batch)
+        batch_size = episode_batch[0]['obs'].shape[0]
         with self.lock:
-            idxs = self._get_storage_idx(inc=batch_size)
+            for e in episode_batch:
+                idxs = self._get_storage_idx(inc=batch_size)
 
-            for i, e in enumerate(episode_batch):
+                self.buffer['obs'][idxs] = e['obs']
+                self.buffer['ag'][idxs] = e['ag']
+                self.buffer['g'][idxs] = e['g']
+                self.buffer['actions'][idxs] = e['act']
+                self.goal_ids[idxs] = e['last_ag_oracle_id']
+
+            # for i, e in enumerate(episode_batch):
                 # store the informations
-                self.buffer['obs'][idxs[i]] = e['obs']
-                self.buffer['ag'][idxs[i]] = e['ag']
-                self.buffer['g'][idxs[i]] = e['g']
-                self.buffer['actions'][idxs[i]] = e['act']
-                self.goal_ids[idxs[i]] = e['last_ag_oracle_id']
+                # self.buffer['obs'][idxs[i]] = e['obs']
+                # self.buffer['ag'][idxs[i]] = e['ag']
+                # self.buffer['g'][idxs[i]] = e['g']
+                # self.buffer['actions'][idxs[i]] = e['act']
+                # self.goal_ids[idxs[i]] = e['last_ag_oracle_id']
 
     # sample the data from the replay buffer
     def sample(self, batch_size):
