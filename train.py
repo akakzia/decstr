@@ -10,7 +10,6 @@ import torch
 from rollout import RolloutWorker
 from goal_sampler import GoalSampler
 from utils import init_storage
-from mpi_utils.mpi_utils import fork
 import time
 from mpi_utils import logger
 
@@ -57,8 +56,6 @@ def launch(args):
 
     # def rollout worker
     rollout_worker = RolloutWorker(env, policy, goal_sampler,  args)
-
-
 
     # start to collect samples
     episode_count = 0
