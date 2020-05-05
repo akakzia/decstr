@@ -85,23 +85,24 @@ if __name__ == '__main__':
     # def rollout worker
     rollout_worker = RolloutWorker(env, policy, goal_sampler,  args)
 
-    eval_goals = goal_sampler.valid_goals
+    # eval_goals = goal_sampler.valid_goals
+    eval_idxs = np.random.choice(range(len(goal_sampler.valid_goals)), size=num_eval)
+    eval_goals = goal_sampler.valid_goals[eval_idxs]
     inits = [None] * len(eval_goals)
     all_results = []
-    for i in range(num_eval):
-        episodes = rollout_worker.generate_rollout(inits, eval_goals, self_eval=True, true_eval=True, animated=False)
-        results = np.array([str(e['g'][0]) == str(e['ag'][-1]) for e in episodes]).astype(np.int)
-        all_results.append(results)
-        data = np.array([[e['ag'][0], e['ag'][-1], get_state(e['obs'][0]), get_state(e['obs'][-1])] for e in episodes])
-        print('a')
+    # for i in range(num_eval):
+    episodes = rollout_worker.generate_rollout(inits, eval_goals, self_eval=True, true_eval=True, animated=False)
+    results = np.array([str(e['g'][0]) == str(e['ag'][-1]) for e in episodes]).astype(np.int)
+    all_results.append(results)
+    data = [[e['ag'][0], e['ag'][-1], get_state(e['obs'][0]), get_state(e['obs'][-1])] for e in episodes]
 
     results = np.array(all_results)
     data = sum(MPI.COMM_WORLD.allgather(data), [])
     print('{} - Av Success Rate: {}'.format(MPI.COMM_WORLD.Get_rank(), results.mean()))
     if MPI.COMM_WORLD.Get_rank() == 0:
-        print('Shape of data is {}'.format(data.shape))
+        print('Shape of data is {}'.format(np.array(data).shape))
         with open(os.path.join('data_samples.pkl'), 'wb') as f:
-            pkl.dump(data, f)
+            pkl.dump(np.array(data), f)
 
 
 # def generator(li):
