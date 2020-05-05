@@ -410,7 +410,7 @@ class FetchManipulateEnv(robot_env.RobotEnv):
 
             return obs
 
-        p_stack_two = 0.7
+        p_stack_two = 0.6
         if np.random.uniform() > p_stack_two:
             stack = list(np.random.choice([i for i in range(self.num_blocks)], 3, replace=False))
             z_stack = [0.525, 0.475, 0.425]
@@ -418,7 +418,7 @@ class FetchManipulateEnv(robot_env.RobotEnv):
             stack = list(np.random.choice([i for i in range(self.num_blocks)], 2, replace=False))
             z_stack = [0.475, 0.425]
 
-        p_coplanar = 0.7
+        p_coplanar = 0.6
         idx_grasp = np.random.choice([i for i in range(self.num_blocks)])
         if np.random.uniform() < p_coplanar:
             for i, obj_name in enumerate(self.object_names):

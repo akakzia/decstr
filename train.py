@@ -81,10 +81,11 @@ def launch(args):
 
             # collect episodes
             t_i = time.time()
+            # if args.biased_init then true_eval is False
             episodes = rollout_worker.generate_rollout(inits=inits,
                                                        goals=goals,
                                                        self_eval=self_eval,
-                                                       true_eval=False)
+                                                       true_eval=not args.biased_init)
             time_dict['rollout'] += time.time() - t_i
 
             # update goal sampler (add new discovered goals to the list
