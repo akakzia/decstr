@@ -384,7 +384,7 @@ class FetchManipulateEnv(robot_env.RobotEnv):
         self.initial_gripper_xpos = self.sim.data.get_site_xpos('robot0:grip').copy()
         self.height_offset = self.sim.data.get_site_xpos('object0')[2]
 
-    def reset_goal(self, goal, init=None, eval=False):
+    def reset_goal(self, goal, init=None, biased_init=False):
         if init is not None:
             return self.reset_init(init, goal)
 
@@ -393,7 +393,7 @@ class FetchManipulateEnv(robot_env.RobotEnv):
         self.sim.set_state(self.initial_state)
 
         # If evaluation mode, generate blocks on the table with no stacks
-        if eval:
+        if not biased_init:
             for i, obj_name in enumerate(self.object_names):
                 object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(obj_name))
                 assert object_qpos.shape == (7,)
