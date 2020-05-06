@@ -179,9 +179,12 @@ class GoalSampler:
 
         self.sync()
         for e in episodes:
-            last_ag = e['ag'][-1]
-            oracle_id = self.g_str_to_oracle_id[str(last_ag)]
-            e['last_ag_oracle_id'] = oracle_id
+            # last_ag = e['ag'][-1]
+            # oracle_id = self.g_str_to_oracle_id[str(last_ag)]
+            # e['last_ag_oracle_id'] = oracle_id
+            g = e['g'][0]
+            oracle_id = self.g_str_to_oracle_id[str(g)]
+            e['g_oracle_id'] = oracle_id
 
         return episodes
 
@@ -227,15 +230,15 @@ class GoalSampler:
                 if n_points > 4:
                     sf = np.array(succ_fail_per_bucket[k])
                     self.C[k] = np.mean(sf[n_points // 2:, 1])
-                    # self.LP[k] = np.abs(np.sum(sf[n_points // 2:, 1]) - np.sum(sf[: n_points // 2, 1])) / n_points
-                    self.LP[k] = np.abs(np.mean(sf[n_points // 2:, 1]) - np.mean(sf[: n_points // 2, 1]))
+                    self.LP[k] = np.abs(np.sum(sf[n_points // 2:, 1]) - np.sum(sf[: n_points // 2, 1])) / n_points
+                    # self.LP[k] = np.abs(np.mean(sf[n_points // 2:, 1]) - np.mean(sf[: n_points // 2, 1]))
 
             # compute p
             if self.LP.sum() == 0:
                 self.p = np.ones([self.num_buckets]) / self.num_buckets
             else:
-                self.p = self.LP / self.LP.sum()
-                # self.p = self.epsilon * (1 - self.C) / (1 - self.C).sum() + (1 - self.epsilon) * self.LP / self.LP.sum()
+                # self.p = self.LP / self.LP.sum()
+                self.p = self.epsilon * (1 - self.C) / (1 - self.C).sum() + (1 - self.epsilon) * self.LP / self.LP.sum()
 
             if self.p.sum() > 1:
                 self.p[np.argmax(self.p)] -= self.p.sum() - 1
@@ -260,12 +263,12 @@ class GoalSampler:
     def build_batch(self, batch_size):
         # only consider buckets filled with discovered goals
         LP = self.LP
-        # C = self.C
+        C = self.C
         if LP.sum() == 0:
             p = np.ones([self.num_buckets]) / self.num_buckets
         else:
-            p = self.epsilon * np.ones([self.num_buckets]) / self.num_buckets + (1 - self.epsilon) * LP / LP.sum()
-            # p = self.epsilon * (1 - C) / (1 - C).sum() + (1 - self.epsilon) * LP / LP.sum()
+            # p = self.epsilon * np.ones([self.num_buckets]) / self.num_buckets + (1 - self.epsilon) * LP / LP.sum()
+            p = self.epsilon * (1 - C) / (1 - C).sum() + (1 - self.epsilon) * LP / LP.sum()
         if p.sum() > 1:
             p[np.argmax(self.p)] -= p.sum() - 1
         elif p.sum() < 1:

@@ -18,7 +18,7 @@ def above(x, y):
     A function that returns whether the object x is above y
     """
     assert x.shape == y.shape
-    return np.linalg.norm(x[:2] - y[:2]) < 0.07 and 0.06 > x[2] - y[2] > 0.02
+    return np.linalg.norm(x[:2] - y[:2]) < 0.05 and 0.06 > x[2] - y[2] > 0.02
     # return np.linalg.norm(x[:2] - y[:2]) < 0.07 and 0.06 > np.abs(x[2] - y[2]) > 0.01
 
 
@@ -260,11 +260,11 @@ class FetchManipulateEnv(robot_env.RobotEnv):
         itr = 0
         observation = obs['observation']
         # Make sure to get high enough not to hit objects
-        for _ in range(10):
-            next_obs, r, d, info = self.step([0, 0, 1, 1])
-            observation = next_obs['observation']
+        # for _ in range(10):
+        #     next_obs, r, d, info = self.step([0, 0, 1, 1])
+        #     observation = next_obs['observation']
         # Reach object and grasp it
-        while not success and itr < 20:
+        while not success and itr < 30:
             action = np.concatenate((7 * (-observation[:3] + observation[10 + 15 * target_idx:13 + 15 * target_idx]), np.ones(1)))
             if np.linalg.norm(-observation[:3] + observation[10 + 15 * target_idx:13 + 15 * target_idx]) < 0.005:
                 for _ in range(15):
@@ -410,7 +410,7 @@ class FetchManipulateEnv(robot_env.RobotEnv):
 
             return obs
 
-        p_stack_two = 0.6
+        p_stack_two = 0.7
         if np.random.uniform() > p_stack_two:
             stack = list(np.random.choice([i for i in range(self.num_blocks)], 3, replace=False))
             z_stack = [0.525, 0.475, 0.425]
@@ -418,7 +418,7 @@ class FetchManipulateEnv(robot_env.RobotEnv):
             stack = list(np.random.choice([i for i in range(self.num_blocks)], 2, replace=False))
             z_stack = [0.475, 0.425]
 
-        p_coplanar = 0.6
+        p_coplanar = 0.7
         idx_grasp = np.random.choice([i for i in range(self.num_blocks)])
         if np.random.uniform() < p_coplanar:
             for i, obj_name in enumerate(self.object_names):
@@ -448,11 +448,11 @@ class FetchManipulateEnv(robot_env.RobotEnv):
                                                                                          size=2)
                     object_qpos[:2] = object_xpos
 
-                    idx_grasp = i
+                    # idx_grasp = i
 
                 self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
-            if len(stack) == self.num_blocks:
-                idx_grasp = stack[0]
+            # if len(stack) == self.num_blocks:
+            #     idx_grasp = stack[0]
 
         self.sim.forward()
         obs = self._get_obs()
