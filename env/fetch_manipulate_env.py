@@ -18,7 +18,7 @@ def above(x, y):
     A function that returns whether the object x is above y
     """
     assert x.shape == y.shape
-    return np.linalg.norm(x[:2] - y[:2]) < 0.07 and 0.06 > x[2] - y[2] > 0.01
+    return np.linalg.norm(x[:2] - y[:2]) < 0.07 and 0.06 > x[2] - y[2] > 0.02
     # return np.linalg.norm(x[:2] - y[:2]) < 0.07 and 0.06 > np.abs(x[2] - y[2]) > 0.01
 
 
