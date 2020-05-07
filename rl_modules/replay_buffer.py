@@ -45,7 +45,7 @@ class MultiBuffer:
                 self.buffer['ag'][idxs[i]] = e['ag']
                 self.buffer['g'][idxs[i]] = e['g']
                 self.buffer['actions'][idxs[i]] = e['act']
-                self.goal_ids[idxs[i]] = e['g_oracle_id']
+                self.goal_ids[idxs[i]] = e['last_ag_oracle_id']
 
     # sample the data from the replay buffer
     def sample(self, batch_size):
