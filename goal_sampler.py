@@ -21,7 +21,10 @@ class GoalSampler:
         self.epsilon = args.curriculum_eps
 
         buckets = generate_goals(nb_objects=3, sym=1, asym=1)
-        if not self.automatic_buckets: self.num_buckets = len(buckets)
+        # If no curriculum is used then 0 buckets
+        # If no automatic buckets, then number of buckets = number of predefined buckets
+        if not self.curriculum_learning: self.num_buckets = 0
+        elif not self.automatic_buckets: self.num_buckets = len(buckets)
         all_goals = generate_all_goals_in_goal_space().astype(np.float32)
         valid_goals = []
         for k in buckets.keys():
@@ -249,13 +252,14 @@ class GoalSampler:
         # logger.info('R{}be, p{}'.format(self.rank, self.p))
         # logger.info('R{}be, dg{}'.format(self.rank, self.discovered_goals_str))
         # logger.info('R{}be, b{}, {}, {}, {}'.format(self.rank, self.buckets[0], self.buckets[1], self.buckets[2], self.buckets[3]))
-        self.p = MPI.COMM_WORLD.bcast(self.p, root=0)
-        self.LP = MPI.COMM_WORLD.bcast(self.LP, root=0)
-        self.C = MPI.COMM_WORLD.bcast(self.C, root=0)
+        if self.curriculum_learning:
+            self.p = MPI.COMM_WORLD.bcast(self.p, root=0)
+            self.LP = MPI.COMM_WORLD.bcast(self.LP, root=0)
+            self.C = MPI.COMM_WORLD.bcast(self.C, root=0)
+            self.buckets = MPI.COMM_WORLD.bcast(self.buckets, root=0)
         self.discovered_goals = MPI.COMM_WORLD.bcast(self.discovered_goals, root=0)
         self.discovered_goals_str = MPI.COMM_WORLD.bcast(self.discovered_goals_str, root=0)
         self.discovered_goals_oracle_id = MPI.COMM_WORLD.bcast(self.discovered_goals_oracle_id, root=0)
-        self.buckets = MPI.COMM_WORLD.bcast(self.buckets, root=0)
         # logger.info('R{}af, p{}'.format(self.rank, self.p))
         # logger.info('R{}af, b{}, {}, {}, {}'.format(self.rank, self.buckets[0], self.buckets[1], self.buckets[2], self.buckets[3]))
         # logger.info('R{}af, dg{}'.format(self.rank, self.discovered_goals_str))
@@ -339,5 +343,6 @@ class GoalSampler:
         data.to_csv(os.path.join(eval_path, 'evaluations.csv'))
 
     def save_bucket_contents(self, bucket_path, epoch):
-        with open(bucket_path + '/bucket_ep_{}.pkl'.format(epoch), 'wb') as f:
-            pickle.dump(self.buckets, f)
+        if self.curriculum_learning:
+            with open(bucket_path + '/bucket_ep_{}.pkl'.format(epoch), 'wb') as f:
+                pickle.dump(self.buckets, f)
