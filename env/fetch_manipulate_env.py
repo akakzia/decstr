@@ -457,8 +457,8 @@ class FetchManipulateEnv(robot_env.RobotEnv):
         self.sim.forward()
         obs = self._get_obs()
         
-        # if np.random.uniform() < 0.6:
-        #     obs = self._grasp(obs, idx_grasp)
+        if np.random.uniform() < 0.6:
+            obs = self._grasp(obs, idx_grasp)
         return obs
 
     def reset_init(self, init_config, target_goal):
