@@ -448,11 +448,11 @@ class FetchManipulateEnv(robot_env.RobotEnv):
                                                                                          size=2)
                     object_qpos[:2] = object_xpos
 
-                    # idx_grasp = i
+                    idx_grasp = i
 
                 self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
-            # if len(stack) == self.num_blocks:
-            #     idx_grasp = stack[0]
+            if len(stack) == self.num_blocks:
+                idx_grasp = stack[0]
 
         self.sim.forward()
         obs = self._get_obs()
