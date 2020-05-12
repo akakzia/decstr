@@ -150,9 +150,10 @@ class GoalSampler:
                             if str(ag) not in self.valid_goals_str:
                                 stop = 1
                             # it is, update info
-                            self.discovered_goals.append(ag.copy())
-                            self.discovered_goals_str.append(str(ag))
-                            self.discovered_goals_oracle_id.append(self.g_str_to_oracle_id[str(ag)])
+                            else:
+                                self.discovered_goals.append(ag.copy())
+                                self.discovered_goals_str.append(str(ag))
+                                self.discovered_goals_oracle_id.append(self.g_str_to_oracle_id[str(ag)])
 
                         # update discovered pairs
                         id_ag = self.g_str_to_oracle_id[str(ag)]
