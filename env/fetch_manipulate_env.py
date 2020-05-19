@@ -18,7 +18,7 @@ def above(x, y):
     A function that returns whether the object x is above y
     """
     assert x.shape == y.shape
-    return np.linalg.norm(x[:2] - y[:2]) < 0.05 and 0.06 > x[2] - y[2] > 0.02
+    return np.linalg.norm(x[:2] - y[:2]) < 0.05 and 0.06 > x[2] - y[2] > 0.03
     # return np.linalg.norm(x[:2] - y[:2]) < 0.07 and 0.06 > np.abs(x[2] - y[2]) > 0.01
 
 
@@ -448,16 +448,16 @@ class FetchManipulateEnv(robot_env.RobotEnv):
                                                                                          size=2)
                     object_qpos[:2] = object_xpos
 
-                    idx_grasp = i
+                    # idx_grasp = i
 
                 self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
-            if len(stack) == self.num_blocks:
-                idx_grasp = stack[0]
+            # if len(stack) == self.num_blocks:
+            #     idx_grasp = stack[0]
 
         self.sim.forward()
         obs = self._get_obs()
         
-        if np.random.uniform() < 0.6:
+        if np.random.uniform() < 0.5:
             obs = self._grasp(obs, idx_grasp)
         return obs
 
