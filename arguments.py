@@ -53,7 +53,7 @@ def get_args():
     parser.add_argument('--curriculum-eps', type=float, default=0.3, help='Prob of sampling random goal in curriculum')
     parser.add_argument('--curriculum-nu', type=float, default=0.6, help='Prob of sampling random goal in curriculum')
     parser.add_argument('--multihead-buffer', type=bool, default=True, help='use a multihead replay buffer in curriculum')
-    parser.add_argument('--queue-length', type=int, default=500, help='The window size when computing competence')
+    parser.add_argument('--queue-length', type=int, default=900, help='The window size when computing competence')
 
     # Deep sets arguments
     parser.add_argument('--architecture', type=str, default='deepsets', help='The architecture of the networks')
