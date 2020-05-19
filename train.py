@@ -114,9 +114,8 @@ def launch(args):
 
             # train policy
             t_i = time.time()
-            if episode_count > args.n_exploration_episodes:
-                for _ in range(args.n_batches):
-                    policy.train()
+            for _ in range(args.n_batches):
+                policy.train()
             time_dict['policy_train'] += time.time() - t_i
 
             episode_count += args.num_rollouts_per_mpi * args.num_workers
