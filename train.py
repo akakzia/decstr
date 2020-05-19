@@ -45,6 +45,7 @@ def launch(args):
 
     args.env_params = get_env_params(env)
 
+    logger.info(vars(args))
     # def goal sampler:
     goal_sampler = GoalSampler(args)
 
