@@ -84,7 +84,7 @@ def launch(args):
             # Add condition on number of discovered goals to make sure no stacks are discovered at early stage
             # 12 is chosen heuristically, being greater than 8 (to allow discovering close configs first, and
             # some random above configs
-            if len(goal_sampler.discovered_goals) < 12:
+            if epoch < 100 and args.automatic_buckets:
                 biased_init = False
             else:
                 biased_init = args.biased_init

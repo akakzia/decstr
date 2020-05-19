@@ -231,11 +231,14 @@ class GoalSampler:
             # compute C, LP per bucket
             for k in self.buckets.keys():
                 n_points = len(succ_fail_per_bucket[k])
-                if n_points > 4:
+                if n_points > 100:
                     sf = np.array(succ_fail_per_bucket[k])
                     self.C[k] = np.mean(sf[n_points // 2:, 1])
                     self.LP[k] = np.abs(np.sum(sf[n_points // 2:, 1]) - np.sum(sf[: n_points // 2, 1])) / n_points
                     # self.LP[k] = np.abs(np.mean(sf[n_points // 2:, 1]) - np.mean(sf[: n_points // 2, 1]))
+                else:
+                    self.C[k] = 0
+                    self.LP[k] = 0
 
             # compute p
             if self.LP.sum() == 0:
