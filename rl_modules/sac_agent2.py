@@ -60,7 +60,7 @@ class SACAgent:
             self.policy_optim = torch.optim.Adam(self.actor_network.parameters(), lr=self.args.lr_actor)
             self.critic_optim = torch.optim.Adam(self.critic_network.parameters(), lr=self.args.lr_critic)
         elif self.architecture == 'deepsets':
-            self.model = DeepSetSAC(self.env_params, self.args.deepsets_attention, self.args.double_critic_attention)
+            self.model = DeepSetSAC(self.env_params, self.args.deepsets_attention, self.args.double_critic_attention, args)
             # sync the networks across the CPUs
             sync_networks(self.model.rho_actor)
             sync_networks(self.model.rho_critic)
