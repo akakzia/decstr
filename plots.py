@@ -8,7 +8,7 @@ import pickle
 import math
 import json
 from scipy.stats import ttest_ind
-from utils import get_stat_func, generate_goals, generate_all_goals_in_goal_space
+from utils import get_stat_func, generate_goals, generate_all_goals_in_goal_space, CompressPDF
 
 font = {'size': 50}
 matplotlib.rc('font', **font)
@@ -40,6 +40,13 @@ NB_BUCKETS = 5
 NB_EPS_PER_EPOCH = 2400
 NB_VALID_GOALS = 35
 line, err_min, err_plus = get_stat_func(line=LINE, err=ERR)
+
+COMPRESSOR = CompressPDF(4)
+# 0: '/default',
+# 1: '/prepress',
+# 2: '/printer',
+# 3: '/ebook',
+# 4: '/screen'
 
 
 def setup_figure(xlabel=None, ylabel=None, xlim=None, ylim=None):
@@ -88,6 +95,12 @@ def setup_four_figs(xlabels=None, ylabels=None, xlims=None, ylims=None):
 def save_fig(path, artists):
     plt.savefig(os.path.join(path), bbox_extra_artists=artists, bbox_inches='tight', dpi=DPI)
     plt.close('all')
+    # compress PDF
+    try:
+        COMPRESSOR.compress(path, path[:-4] + '_compressed.pdf')
+    except:
+        pass
+
 
 def check_length_and_seeds(experiment_path):
     conditions = os.listdir(experiment_path)
@@ -252,7 +265,7 @@ for PLOT in TO_PLOT:
     max_len, max_seeds, min_len, min_seeds = check_length_and_seeds(experiment_path=experiment_path)
     print('# epochs: {}, # seeds: {}'.format(min_len, min_seeds))
     # plot c, lp , p and sr for each run
-    # plot_c_lp_p_sr(experiment_path)
+    plot_c_lp_p_sr(experiment_path)
 
     if PLOT == 'init_study':
         sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='with_init')
