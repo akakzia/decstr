@@ -122,8 +122,10 @@ def launch(args):
             episode_count += args.num_rollouts_per_mpi * args.num_workers
 
         t_i = time.time()
-        if goal_sampler.curriculum_learning:
+        if goal_sampler.curriculum_learning and rank == 0:
             goal_sampler.update_LP()
+        goal_sampler.sync()
+
         time_dict['lp_update'] += time.time() - t_i
         time_dict['epoch'] += time.time() -t_init
         time_dict['total'] = time.time() - t_total_init
