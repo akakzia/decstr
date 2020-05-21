@@ -120,7 +120,7 @@ def init_storage(args):
             logdir += '_double'
     else:
         logdir = os.path.join(args.save_dir, '{}_no_curriculum_{}'.format(datetime.now(), args.architecture))
-    if args.symmetric_trick:
+    if args.symmetry_trick:
         logdir += '_sym'
     if args.biased_init:
         logdir += '_biased_init'
