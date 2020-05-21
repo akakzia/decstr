@@ -465,6 +465,11 @@ class FetchManipulateEnv(robot_env.RobotEnv):
         if init is not None:
             return self.reset_init(init, goal)
 
+
+        self.target_goal = goal
+
+        self.sim.set_state(self.initial_state)
+
         p_coplanar = 0.7
         if biased_init and np.random.uniform() > p_coplanar:
             p_stack_two = 0.7
