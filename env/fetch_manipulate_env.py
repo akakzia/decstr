@@ -534,13 +534,11 @@ class FetchManipulateEnv(robot_env.RobotEnv):
                         over = False
                         break
         if biased_init and np.random.rand() < 0.5:
-            print('S:', stack)
             ids = list(range(self.num_blocks))
             # do not grasp base of stack
             if stack:
                 for s in stack[1:]:
                     ids.remove(s)
-            print(ids)
             idx_grasp = np.random.choice(ids)
             self.__grasp(idx_grasp)
 
