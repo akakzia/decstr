@@ -278,6 +278,7 @@ class GoalSampler:
                 p = np.ones([self.num_buckets]) / self.num_buckets
             else:
                 p = self.epsilon * np.ones([self.num_buckets]) / self.num_buckets + (1 - self.epsilon) * LP / LP.sum()
+                # p = (1 - C) * LP / np.sum((1 - C) * LP)
                 # p = self.epsilon * (1 - C) / (1 - C).sum() + (1 - self.epsilon) * LP / LP.sum()
             if p.sum() > 1:
                 p[np.argmax(self.p)] -= p.sum() - 1
