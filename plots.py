@@ -23,7 +23,7 @@ colors = [[0, 0.447, 0.7410], [0.85, 0.325, 0.098], [0.466, 0.674, 0.188], [0.92
 
 RESULTS_PATH = '/home/flowers/Desktop/Scratch/sac_curriculum/results/'
 SAVE_PATH = '/home/flowers/Desktop/Scratch/sac_curriculum/results/plots/'
-TO_PLOT = ['init_study']
+TO_PLOT = ['init_study', 'symmetry_bias']
 
 LINE = 'mean'
 ERR = 'std'
@@ -39,14 +39,10 @@ FREQ = 20
 NB_BUCKETS = 5
 NB_EPS_PER_EPOCH = 2400
 NB_VALID_GOALS = 35
-# EPISODES = np.arange(0, N_EPOCHS * 2400, 2400)
-# X_SIZE = len(EPISODES)
-# FREQ = 10
-# SUB_EPISODES = np.arange(0, N_EPOCHS * 2400, 2400 * FREQ)
 line, err_min, err_plus = get_stat_func(line=LINE, err=ERR)
 
 
-def setup_figure(xlabel=None, ylabel=None, xlim=None, ylim=None, factor=1):
+def setup_figure(xlabel=None, ylabel=None, xlim=None, ylim=None):
     fig = plt.figure(figsize=(22, 15), frameon=False)
     ax = fig.add_subplot(111)
     ax.spines['top'].set_linewidth(6)
@@ -98,19 +94,25 @@ def check_length_and_seeds(experiment_path):
     # check max_length and nb seeds
     max_len = 0
     max_seeds = 0
+    min_len = 1e6
+    min_seeds = 1e6
 
     for cond in conditions:
         cond_path = experiment_path + cond + '/'
         list_runs = sorted(os.listdir(cond_path))
         if len(list_runs) > max_seeds:
             max_seeds = len(list_runs)
+        if len(list_runs) < min_seeds:
+            min_seeds = len(list_runs)
         for run in list_runs:
             run_path = cond_path + run + '/'
             data_run = pd.read_csv(run_path + 'progress.csv')
             nb_epochs = len(data_run)
             if nb_epochs > max_len:
                 max_len = nb_epochs
-    return max_len, max_seeds
+            if nb_epochs < min_len:
+                min_len = nb_epochs
+    return max_len, max_seeds, min_len, min_seeds
 
 
 def plot_c_lp_p_sr(experiment_path, true_buckets=True):
@@ -245,14 +247,17 @@ def get_mean_sr(experiment_path, max_len, max_seeds, ref='with_init'):
 
 for PLOT in TO_PLOT:
     print('Plotting', PLOT)
-    if PLOT == 'init_study':
-        experiment_path = RESULTS_PATH + PLOT + '/'
-        max_len, max_seeds = check_length_and_seeds(experiment_path=experiment_path)
-        print('# epochs: {}, # seeds: {}'.format(max_len, max_seeds))
-        # plot c, lp , p and sr for each run
-        # plot_c_lp_p_sr(experiment_path)
+    # if PLOT == 'init_study':
+    experiment_path = RESULTS_PATH + PLOT + '/'
+    max_len, max_seeds, min_len, min_seeds = check_length_and_seeds(experiment_path=experiment_path)
+    print('# epochs: {}, # seeds: {}'.format(min_len, min_seeds))
+    # plot c, lp , p and sr for each run
+    # plot_c_lp_p_sr(experiment_path)
 
+    if PLOT == 'init_study':
         sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='with_init')
+    elif PLOT == 'symmetry_bias':
+        sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='without_sym')
 
 
 
