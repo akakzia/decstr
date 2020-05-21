@@ -120,6 +120,12 @@ def init_storage(args):
             logdir += '_double'
     else:
         logdir = os.path.join(args.save_dir, '{}_no_curriculum_{}'.format(datetime.now(), args.architecture))
+    if args.symmetric_trick:
+        logdir += '_sym'
+    if args.biased_init:
+        logdir += '_biased_init'
+    if args.automatic_buckets:
+        logdir += '_auto'
     # path to save evaluations
     model_path = os.path.join(logdir, 'models')
     bucket_path = os.path.join(logdir, 'buckets')
