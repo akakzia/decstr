@@ -280,3 +280,40 @@ def init_storage(args):
     with open(os.path.join(logdir, 'config.json'), 'w') as f:
         json.dump(vars(args), f, indent=2)
     return logdir, model_path, bucket_path
+
+
+def get_stat_func(line='mean', err='std'):
+
+    if line == 'mean':
+        def line_f(a):
+            return np.nanmean(a, axis=0)
+    elif line == 'median':
+        def line_f(a):
+            return np.nanmedian(a, axis=0)
+    else:
+        raise NotImplementedError
+
+    if err == 'std':
+        def err_plus(a):
+            return line_f(a) + np.nanstd(a, axis=0)
+        def err_minus(a):
+            return line_f(a) - np.nanstd(a, axis=0)
+    elif err == 'sem':
+        def err_plus(a):
+            return line_f(a) + np.nanstd(a, axis=0) / np.sqrt(a.shape[0])
+        def err_minus(a):
+            return line_f(a) - np.nanstd(a, axis=0) / np.sqrt(a.shape[0])
+    elif err == 'range':
+        def err_plus(a):
+            return np.nanmax(a, axis=0)
+        def err_minus(a):
+            return np.nanmin(a, axis=0)
+    elif err == 'interquartile':
+        def err_plus(a):
+            return np.nanpercentile(a, q=75, axis=0)
+        def err_minus(a):
+            return np.nanpercentile(a, q=25, axis=0)
+    else:
+        raise NotImplementedError
+
+    return line_f, err_minus, err_plus
