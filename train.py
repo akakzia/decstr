@@ -135,7 +135,8 @@ def launch(args):
             episodes = rollout_worker.generate_rollout(inits=[None] * len(eval_goals),
                                                        goals=eval_goals,
                                                        self_eval=True,
-                                                       true_eval=True)
+                                                       true_eval=True,
+                                                       biased_init=False)
 
             results = np.array([str(e['g'][0]) == str(e['ag'][-1]) for e in episodes]).astype(np.int)
             all_results = MPI.COMM_WORLD.gather(results, root=0)
