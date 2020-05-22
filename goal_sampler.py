@@ -44,6 +44,7 @@ class GoalSampler:
         self.valid_goals_oracle_ids = np.array([self.g_str_to_oracle_id[str(vg)] for vg in self.valid_goals])
 
         self.rew_counters = dict(zip(range(len(self.all_goals)), [0 for _ in range(len(self.all_goals))]))
+        self.target_counters = dict(zip(range(len(self.all_goals)), [0 for _ in range(len(self.all_goals))]))
 
         if self.curriculum_learning:
             # initialize deques of successes and failures for all goals
@@ -135,6 +136,12 @@ class GoalSampler:
             all_episode_list = []
             for eps in all_episodes:
                 all_episode_list += eps
+
+            for e in all_episode_list:
+                reached_oracle_id = self.g_str_to_oracle_id[str(e['ag'][-1])]
+                target_oracle_id = self.g_str_to_oracle_id[str(e['g'][0])]
+                self.rew_counters[reached_oracle_id] += 1
+                self.target_counters[target_oracle_id] += 1
             # find out if new goals were discovered
             # label each episode with the oracle id of the last ag (to know where to store it in buffers)
             if not self.curriculum_learning or self.automatic_buckets:
@@ -184,7 +191,6 @@ class GoalSampler:
             last_ag = e['ag'][-1]
             oracle_id = self.g_str_to_oracle_id[str(last_ag)]
             e['last_ag_oracle_id'] = oracle_id
-            self.rew_counters[oracle_id] += 1
 
         return episodes
 
