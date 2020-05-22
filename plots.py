@@ -23,7 +23,7 @@ colors = [[0, 0.447, 0.7410], [0.85, 0.325, 0.098], [0.466, 0.674, 0.188], [0.92
 
 RESULTS_PATH = '/home/flowers/Desktop/Scratch/sac_curriculum/results/'
 SAVE_PATH = '/home/flowers/Desktop/Scratch/sac_curriculum/results/plots/'
-TO_PLOT = ['init_study', 'symmetry_bias']
+TO_PLOT = ['tests', 'init_study', 'symmetry_bias', 'tests']
 
 LINE = 'mean'
 ERR = 'std'
@@ -271,6 +271,8 @@ for PLOT in TO_PLOT:
         sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='with_init')
     elif PLOT == 'symmetry_bias':
         sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='without_sym')
+    elif PLOT == 'tests':
+        sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='oldinit_oldlp_pre')
 
 
 
