@@ -270,7 +270,7 @@ class GoalSampler:
                 # p = (1 - C) * LP / np.sum((1 - C) * LP)
                 # p = self.epsilon * (1 - C) / (1 - C).sum() + (1 - self.epsilon) * LP / LP.sum()
             if p.sum() > 1:
-                p[np.argmax(self.p)] -= p.sum() - 1
+                p[np.argmax(p)] -= p.sum() - 1
             elif p.sum() < 1:
                 p[-1] = 1 - p[:-1].sum()
             buckets = np.random.choice(range(self.num_buckets), p=p, size=batch_size)
