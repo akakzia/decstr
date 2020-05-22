@@ -43,6 +43,8 @@ class GoalSampler:
         self.g_str_to_oracle_id = dict(zip(self.all_goals_str, range(self.num_goals)))
         self.valid_goals_oracle_ids = np.array([self.g_str_to_oracle_id[str(vg)] for vg in self.valid_goals])
 
+        self.rew_counters = dict(zip(range(len(self.all_goals)), [0 for _ in range(len(self.all_goals))]))
+
         if self.curriculum_learning:
             # initialize deques of successes and failures for all goals
             self.successes_and_failures = []
@@ -109,8 +111,6 @@ class GoalSampler:
                     self_eval = True if np.random.random() < 0.1 else False
                     # if self-evaluation then sample randomly from discovered goals
                     if self_eval:
-                        # goal_ids = np.random.choice(range(len(self.discovered_goals)), size=n_goals)
-                        # goals = np.array(self.discovered_goals)[goal_ids]
                         buckets = np.random.choice(range(self.num_buckets), size=n_goals)
                     # if no self evaluation
                     else:
@@ -135,7 +135,6 @@ class GoalSampler:
             all_episode_list = []
             for eps in all_episodes:
                 all_episode_list += eps
-            # logger.info('Len eps' + str(len(all_episode_list)))
             # find out if new goals were discovered
             # label each episode with the oracle id of the last ag (to know where to store it in buffers)
             if not self.curriculum_learning or self.automatic_buckets:
@@ -180,15 +179,12 @@ class GoalSampler:
                         else:
                             if oracle_id in self.discovered_goals_oracle_id:
                                 self.successes_and_failures.append([t, success, oracle_id])
-
         self.sync()
         for e in episodes:
             last_ag = e['ag'][-1]
             oracle_id = self.g_str_to_oracle_id[str(last_ag)]
             e['last_ag_oracle_id'] = oracle_id
-            # g = e['g'][0]
-            # oracle_id = self.g_str_to_oracle_id[str(g)]
-            # e['g_oracle_id'] = oracle_id
+            self.rew_counters[oracle_id] += 1
 
         return episodes
 
@@ -235,7 +231,6 @@ class GoalSampler:
                     sf = np.array(succ_fail_per_bucket[k])
                     self.C[k] = np.mean(sf[n_points // 2:, 1])
                     self.LP[k] = np.abs(np.sum(sf[n_points // 2:, 1]) - np.sum(sf[: n_points // 2, 1])) / n_points
-                    # self.LP[k] = np.abs(np.mean(sf[n_points // 2:, 1]) - np.mean(sf[: n_points // 2, 1]))
                 else:
                     self.C[k] = 0
                     self.LP[k] = 0
@@ -254,9 +249,6 @@ class GoalSampler:
                 self.p[-1] = 1 - self.p[:-1].sum()
 
     def sync(self):
-        # logger.info('R{}be, p{}'.format(self.rank, self.p))
-        # logger.info('R{}be, dg{}'.format(self.rank, self.discovered_goals_str))
-        # logger.info('R{}be, b{}, {}, {}, {}'.format(self.rank, self.buckets[0], self.buckets[1], self.buckets[2], self.buckets[3]))
         if self.curriculum_learning:
             self.p = MPI.COMM_WORLD.bcast(self.p, root=0)
             self.LP = MPI.COMM_WORLD.bcast(self.LP, root=0)
@@ -265,9 +257,6 @@ class GoalSampler:
         self.discovered_goals = MPI.COMM_WORLD.bcast(self.discovered_goals, root=0)
         self.discovered_goals_str = MPI.COMM_WORLD.bcast(self.discovered_goals_str, root=0)
         self.discovered_goals_oracle_id = MPI.COMM_WORLD.bcast(self.discovered_goals_oracle_id, root=0)
-        # logger.info('R{}af, p{}'.format(self.rank, self.p))
-        # logger.info('R{}af, b{}, {}, {}, {}'.format(self.rank, self.buckets[0], self.buckets[1], self.buckets[2], self.buckets[3]))
-        # logger.info('R{}af, dg{}'.format(self.rank, self.discovered_goals_str))
 
     def build_batch(self, batch_size):
         # only consider buckets filled with discovered goals
@@ -305,6 +294,7 @@ class GoalSampler:
         for i in range(self.valid_goals.shape[0]):
             self.stats['{}_in_bucket'.format(i)] = []
             self.stats['Eval_SR_{}'.format(i)] = []
+            self.stats['#Rew_{}'.format(i)] = []
         for i in range(self.num_buckets):
             self.stats['B_{}_LP'.format(i)] = []
             self.stats['B_{}_C'.format(i)] = []
@@ -343,6 +333,7 @@ class GoalSampler:
                 else:
                     self.stats['{}_in_bucket'.format(g_id)].append(0)
             self.stats['Eval_SR_{}'.format(g_id)].append(av_res[g_id])
+            self.stats['#Rew_{}'.format(g_id)].append(self.rew_counters[oracle_id])
         for i in range(self.num_buckets):
             self.stats['B_{}_LP'.format(i)].append(self.LP[i])
             self.stats['B_{}_C'.format(i)].append(self.C[i])
