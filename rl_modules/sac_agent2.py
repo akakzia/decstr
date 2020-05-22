@@ -209,10 +209,12 @@ class SACAgent:
         transitions['obs'], transitions['g'] = self._preproc_og(obs, g)
         # update
         self.o_norm.update(transitions['obs'])
-        self.g_norm.update(transitions['g'])
         # recompute the stats
         self.o_norm.recompute_stats()
-        self.g_norm.recompute_stats()
+
+        if self.args.normalize_goal:
+            self.g_norm.update(transitions['g'])
+            self.g_norm.recompute_stats()
 
     def _preproc_og(self, o, g):
         o = np.clip(o, -self.args.clip_obs, self.args.clip_obs)
