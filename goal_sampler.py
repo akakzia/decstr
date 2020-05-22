@@ -301,6 +301,8 @@ class GoalSampler:
             self.stats['{}_in_bucket'.format(i)] = []
             self.stats['Eval_SR_{}'.format(i)] = []
             self.stats['#Rew_{}'.format(i)] = []
+            self.stats['#Target_{}'.format(i)] = []
+
         for i in range(self.num_buckets):
             self.stats['B_{}_LP'.format(i)] = []
             self.stats['B_{}_C'.format(i)] = []
@@ -340,6 +342,8 @@ class GoalSampler:
                     self.stats['{}_in_bucket'.format(g_id)].append(0)
             self.stats['Eval_SR_{}'.format(g_id)].append(av_res[g_id])
             self.stats['#Rew_{}'.format(g_id)].append(self.rew_counters[oracle_id])
+            self.stats['#Target_{}'.format(g_id)].append(self.target_counters[oracle_id])
+
         for i in range(self.num_buckets):
             self.stats['B_{}_LP'.format(i)].append(self.LP[i])
             self.stats['B_{}_C'.format(i)].append(self.C[i])
