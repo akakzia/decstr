@@ -52,7 +52,8 @@ def get_args():
     # Curriculum learning arguments
     parser.add_argument('--curriculum-learning', type=bool, default=True, help='Use LP-based curriculum learning')
     parser.add_argument('--curriculum-eps', type=float, default=0.3, help='Prob of sampling random goal in curriculum')
-    parser.add_argument('--curriculum-nu', type=float, default=0.6, help='Prob of sampling random goal in curriculum')
+    parser.add_argument('--curriculum-nu', type=float, default=1., help='Hyperparameter for p formula')
+    parser.add_argument('--curriculum-beta', type=float, default=1., help='Hyperparameter for p formula')
     parser.add_argument('--multihead-buffer', type=bool, default=True, help='use a multihead replay buffer in curriculum')
     parser.add_argument('--queue-length', type=int, default=900, help='The window size when computing competence')
 
