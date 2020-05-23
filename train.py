@@ -142,6 +142,7 @@ def launch(args):
 
             results = np.array([str(e['g'][0]) == str(e['ag'][-1]) for e in episodes]).astype(np.int)
             all_results = MPI.COMM_WORLD.gather(results, root=0)
+            assert len(all_results) == args.num_workers
             time_dict['eval'] += time.time() - t_i
 
             if rank == 0:

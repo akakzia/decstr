@@ -28,7 +28,7 @@ def get_args():
     parser.add_argument('--save-freq', type=int, default=10, help='the interval that save the trajectory')
 
     parser.add_argument('--seed', type=int, default=np.random.randint(1e6), help='random seed')
-    parser.add_argument('--num-workers', type=int, default=1, help='the number of cpus to collect samples')
+    parser.add_argument('--num-workers', type=int, default=MPI.COMM_WORLD.Get_size(), help='the number of cpus to collect samples')
     parser.add_argument('--replay-strategy', type=str, default='future', help='the HER strategy')
     parser.add_argument('--clip-return', type=float, default=50, help='if clip the returns')
     parser.add_argument('--save-dir', type=str, default='ignoramus/', help='the path to save the models')
