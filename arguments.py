@@ -22,6 +22,7 @@ def get_args():
     parser.add_argument('--use-pairs', type=bool, default=False, help='use pairs of goals for buckets')
     parser.add_argument('--num-buckets', type=int, default=5, help='number of buckets for automatic generation')
     parser.add_argument('--symmetry-trick', type=bool, default=True, help='experimental stuff from Cédric')
+    parser.add_argument('--small_deepset', type=bool, default=True, help='do evaluation at the end of the epoch w/ frequency')
     parser.add_argument('--normalize_goal', type=bool, default=True, help='do evaluation at the end of the epoch w/ frequency')
 
     parser.add_argument('--evaluations', type=bool, default=True, help='do evaluation at the end of the epoch w/ frequency')
