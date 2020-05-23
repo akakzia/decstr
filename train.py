@@ -142,10 +142,9 @@ def launch(args):
 
             results = np.array([str(e['g'][0]) == str(e['ag'][-1]) for e in episodes]).astype(np.int)
             all_results = MPI.COMM_WORLD.gather(results, root=0)
-            assert len(all_results) == args.num_workers
             time_dict['eval'] += time.time() - t_i
-
             if rank == 0:
+                assert len(all_results) == args.num_workers
                 av_res = np.array(all_results).mean(axis=0)
                 global_sr = np.mean(av_res)
                 log_and_save(logdir, goal_sampler, epoch, episode_count, av_res, global_sr,time_dict)
