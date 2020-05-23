@@ -244,10 +244,11 @@ class GoalSampler:
                     self.LP[k] = 0
 
             # compute p
-            if self.LP.sum() == 0:
+            if np.sum((1 - self.C) * self.LP) == 0:
                 self.p = np.ones([self.num_buckets]) / self.num_buckets
             else:
-                self.p = self.LP / self.LP.sum()
+                self.p = (1 - self.C) * self.LP / np.sum((1 - self.C) * self.LP)
+                # self.p = self.LP / self.LP.sum()
                 # self.p = (1 - np.power(self.C, self.beta)) * np.power(self.LP, self.nu) / np.sum((1 - np.power(self.C, self.beta)) * np.power(self.LP, self.nu))
                 # self.p = self.epsilon * (1 - self.C) / (1 - self.C).sum() + (1 - self.epsilon) * self.LP / self.LP.sum()
 
@@ -273,10 +274,11 @@ class GoalSampler:
             C = self.C
             beta = self.beta
             nu = self.nu
-            if LP.sum() == 0:
+            if np.sum((1 - C) * LP) == 0:
                 p = np.ones([self.num_buckets]) / self.num_buckets
             else:
-                p = self.epsilon * np.ones([self.num_buckets]) / self.num_buckets + (1 - self.epsilon) * LP / LP.sum()
+                p = (1 - C) * LP / np.sum((1 - C) * LP)
+                # p = self.epsilon * np.ones([self.num_buckets]) / self.num_buckets + (1 - self.epsilon) * LP / LP.sum()
                 # p = (1 - np.power(C, beta)) * np.power(LP, nu) / np.sum((1 - np.power(C, beta)) * np.power(LP, nu))
                 # p = self.epsilon * (1 - C) / (1 - C).sum() + (1 - self.epsilon) * LP / LP.sum()
             if p.sum() > 1:
