@@ -24,7 +24,7 @@ colors = [[0, 0.447, 0.7410], [0.85, 0.325, 0.098], [0.466, 0.674, 0.188], [0.92
 
 RESULTS_PATH = '/home/flowers/Desktop/Scratch/sac_curriculum/results/'
 SAVE_PATH = '/home/flowers/Desktop/Scratch/sac_curriculum/results/plots/'
-TO_PLOT = ['plafrim', 'jz', 'tests', 'init_study', 'symmetry_bias', 'tests']
+TO_PLOT = ['jz', 'plafrim',  'tests', 'init_study', 'symmetry_bias', 'tests']
 
 LINE = 'mean'
 ERR = 'std'
@@ -191,10 +191,13 @@ def plot_c_lp_p_sr(experiment_path, true_buckets=True):
                 axs[2].plot(x_eps, data_run['B_{}_C'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
                 axs[3].plot(x_eps, data_run['B_{}_LP'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
                 axs[4].plot(x_eps, data_run['B_{}_p'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
-                p = np.array([data_run['#Rew_{}'.format(i)] for i in range(counter, counter + len(buckets[i]))])
-                counter += len(buckets[i])
-                axs[1].plot(x_eps, np.mean(p, axis=0)[x],  color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//3)
 
+                try:
+                    p = np.array([data_run['#Rew_{}'.format(i)] for i in range(counter, counter + len(buckets[i]))])
+                    counter += len(buckets[i])
+                    axs[1].plot(x_eps, np.mean(p, axis=0)[x],  color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//3)
+                except:
+                    pass
             leg = axs[0].legend(['B{}'.format(i) for i in range(1, 6)],
                              loc='upper center',
                              bbox_to_anchor=(0.5, 1.25),
