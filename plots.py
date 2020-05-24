@@ -36,7 +36,7 @@ MARKERSIZE = 25
 ALPHA = 0.3
 ALPHA_TEST = 0.05
 MARKERS = ['o', 's', 'v', 'X', 'D', 'P', "*"]
-FREQ = 5
+FREQ = 20
 NB_BUCKETS = 5
 NB_EPS_PER_EPOCH = 2400
 NB_VALID_GOALS = 35
@@ -71,8 +71,8 @@ def setup_figure(xlabel=None, ylabel=None, xlim=None, ylim=None):
         plt.xlim(xlim)
     return artists, ax
 
-def setup_four_figs(xlabels=None, ylabels=None, xlims=None, ylims=None):
-    fig, axs = plt.subplots(4, 1, figsize=(10, 10), frameon=False)
+def setup_n_figs(n, xlabels=None, ylabels=None, xlims=None, ylims=None):
+    fig, axs = plt.subplots(n, 1, figsize=(10, 10), frameon=False)
     axs = axs.ravel()
     artists = ()
     for i_ax, ax in enumerate(axs):
@@ -142,11 +142,12 @@ def plot_c_lp_p_sr(experiment_path, true_buckets=True):
             x_eps = np.arange(0, len(data_run) * NB_EPS_PER_EPOCH, NB_EPS_PER_EPOCH * FREQ) / 1000
             x_eps = np.arange(0, len(data_run), FREQ)
             x = np.arange(0, len(data_run), FREQ)
-            artists, axs = setup_four_figs(xlabels=['Epochs'] * 4,
-                                           # xlabels=['Episodes (x$10^3$)'] * 4,
-                                           ylabels=['SR', 'C', 'LP', 'P'],
-                                           xlims=[(0, x_eps[-1])] * 4,
-                                           ylims=[(0,1), (0, 1), None, (0, 1)])
+            artists, axs = setup_n_figs(n=5,
+                                        xlabels=['Epochs'] * 5,
+                                        # xlabels=['Episodes (x$10^3$)'] * 4,
+                                        ylabels=['SR', '#R', 'C', 'LP', 'P'],
+                                        xlims=[(0, x_eps[-1])] * 5,
+                                        ylims=[(0,1), (0, 2000), (0, 1), None, (0, 1)])
             if true_buckets:
                 buckets = generate_goals(nb_objects=3, sym=1, asym=1)
                 all_goals = generate_all_goals_in_goal_space().astype(np.float32)
@@ -185,10 +186,15 @@ def plot_c_lp_p_sr(experiment_path, true_buckets=True):
                     axs[0].plot(x_eps, SR[i][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
                 axs[0].plot(x_eps, np.mean(SR, axis=0)[x], color='k', linestyle='--', marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
 
+            counter = 0
             for i in range(NB_BUCKETS):
-                axs[1].plot(x_eps, data_run['B_{}_C'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
-                axs[2].plot(x_eps, data_run['B_{}_LP'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
-                axs[3].plot(x_eps, data_run['B_{}_p'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
+                axs[2].plot(x_eps, data_run['B_{}_C'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
+                axs[3].plot(x_eps, data_run['B_{}_LP'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
+                axs[4].plot(x_eps, data_run['B_{}_p'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
+                p = np.array([data_run['#Rew_{}'.format(i)] for i in range(counter, counter + len(buckets[i]))])
+                counter += len(buckets[i])
+                axs[1].plot(x_eps, np.mean(p, axis=0)[x],  color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//3)
+
             leg = axs[0].legend(['B{}'.format(i) for i in range(1, 6)],
                              loc='upper center',
                              bbox_to_anchor=(0.5, 1.25),
@@ -209,15 +215,18 @@ def plot_c_lp_p_sr(experiment_path, true_buckets=True):
             except:
                 pass
 
-            try:
-                artists, axs = setup_figure(xlabel='Epochs',
-                                            ylabel='Counter Rew')
-                # axs.plot
-                p = np.array([data_run['#Rew_{}'.format(i)] for i in range(8, NB_VALID_GOALS)])
-                axs.plot(p.transpose(), linewidth=LINEWIDTH)
-                save_fig(path=run_path + 'rewards.pdf', artists=artists)
-            except:
-                pass
+            # try:
+            #     artists, axs = setup_figure(xlabel='Epochs',
+            #                                 ylabel='Counter Rew')
+            #     # axs.plot
+            #     counter = 0
+            #     for i in range(NB_BUCKETS):
+            #         p = np.array([data_run['#Rew_{}'.format(i)] for i in range(counter, counter + len(buckets[i]))])
+            #         counter += len(buckets[i])
+            #         axs.plot(np.mean(p, axis=0),  color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
+            #     save_fig(path=run_path + 'rewards.pdf', artists=artists)
+            # except:
+            #     pass
 
 
 def get_mean_sr(experiment_path, max_len, max_seeds, ref='with_init'):
