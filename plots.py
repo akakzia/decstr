@@ -14,6 +14,7 @@ font = {'size': 50}
 matplotlib.rc('font', **font)
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
+plt.rcParams['figure.constrained_layout.use'] = True
 
 colors = [[0, 0.447, 0.7410], [0.85, 0.325, 0.098], [0.466, 0.674, 0.188], [0.929, 0.694, 0.125],
           [0.494, 0.1844, 0.556],[0.3010, 0.745, 0.933], [137/255,145/255,145/255],
@@ -23,7 +24,7 @@ colors = [[0, 0.447, 0.7410], [0.85, 0.325, 0.098], [0.466, 0.674, 0.188], [0.92
 
 RESULTS_PATH = '/home/flowers/Desktop/Scratch/sac_curriculum/results/'
 SAVE_PATH = '/home/flowers/Desktop/Scratch/sac_curriculum/results/plots/'
-TO_PLOT = ['tests', 'init_study', 'symmetry_bias', 'tests']
+TO_PLOT = ['plafrim', 'jz', 'tests', 'init_study', 'symmetry_bias', 'tests']
 
 LINE = 'mean'
 ERR = 'std'
@@ -35,7 +36,7 @@ MARKERSIZE = 25
 ALPHA = 0.3
 ALPHA_TEST = 0.05
 MARKERS = ['o', 's', 'v', 'X', 'D', 'P', "*"]
-FREQ = 20
+FREQ = 5
 NB_BUCKETS = 5
 NB_EPS_PER_EPOCH = 2400
 NB_VALID_GOALS = 35
@@ -98,6 +99,7 @@ def save_fig(path, artists):
     # compress PDF
     try:
         COMPRESSOR.compress(path, path[:-4] + '_compressed.pdf')
+        os.remove(path)
     except:
         pass
 
@@ -134,6 +136,7 @@ def plot_c_lp_p_sr(experiment_path, true_buckets=True):
         cond_path = experiment_path + cond + '/'
         list_runs = sorted(os.listdir(cond_path))
         for run in list_runs:
+            print(run)
             run_path = cond_path + run + '/'
             data_run = pd.read_csv(run_path + 'progress.csv')
             x_eps = np.arange(0, len(data_run) * NB_EPS_PER_EPOCH, NB_EPS_PER_EPOCH * FREQ) / 1000
@@ -143,7 +146,7 @@ def plot_c_lp_p_sr(experiment_path, true_buckets=True):
                                            # xlabels=['Episodes (x$10^3$)'] * 4,
                                            ylabels=['SR', 'C', 'LP', 'P'],
                                            xlims=[(0, x_eps[-1])] * 4,
-                                           ylims=[(0, 1), (0, 1), None, (0, 1)])
+                                           ylims=[(0,1), (0, 1), None, (0, 1)])
             if true_buckets:
                 buckets = generate_goals(nb_objects=3, sym=1, asym=1)
                 all_goals = generate_all_goals_in_goal_space().astype(np.float32)
@@ -165,6 +168,7 @@ def plot_c_lp_p_sr(experiment_path, true_buckets=True):
                     id_in_valid = [int(np.argwhere(valid_goals_oracle_ids == i).flatten()) for i in bucket_ids[k]]
                     sr = np.mean([data_run['Eval_SR_{}'.format(i)] for i in id_in_valid], axis=0)
                     axs[0].plot(x_eps, sr[x], color=colors[k], marker=MARKERS[k], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
+
             else:
                 T = len(data_run['Eval_SR_1'])
                 SR = np.zeros([NB_BUCKETS, T])
@@ -179,7 +183,7 @@ def plot_c_lp_p_sr(experiment_path, true_buckets=True):
 
                 for i in range(SR.shape[0]):
                     axs[0].plot(x_eps, SR[i][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
-
+                axs[0].plot(x_eps, np.mean(SR, axis=0)[x], color='k', linestyle='--', marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
 
             for i in range(NB_BUCKETS):
                 axs[1].plot(x_eps, data_run['B_{}_C'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
@@ -187,7 +191,7 @@ def plot_c_lp_p_sr(experiment_path, true_buckets=True):
                 axs[3].plot(x_eps, data_run['B_{}_p'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
             leg = axs[0].legend(['B{}'.format(i) for i in range(1, 6)],
                              loc='upper center',
-                             bbox_to_anchor=(0.5, 1.35),
+                             bbox_to_anchor=(0.5, 1.25),
                              ncol=5,
                              fancybox=True,
                              shadow=True,
@@ -195,6 +199,26 @@ def plot_c_lp_p_sr(experiment_path, true_buckets=True):
                              markerscale=1)
             artists += (leg,)
             save_fig(path=run_path + 'SR_LP_C_P.pdf', artists=artists)
+            try:
+                artists, axs = setup_figure(xlabel='Epochs',
+                                            ylabel=['p'])
+                # axs.plot
+                p = np.array([data_run['#proba_{}'.format(i)] for i in range(NB_VALID_GOALS)])
+                axs.plot(p.transpose(), linewidth=LINEWIDTH)
+                save_fig(path=run_path + 'probas.pdf', artists=artists)
+            except:
+                pass
+
+            try:
+                artists, axs = setup_figure(xlabel='Epochs',
+                                            ylabel='Counter Rew')
+                # axs.plot
+                p = np.array([data_run['#Rew_{}'.format(i)] for i in range(8, NB_VALID_GOALS)])
+                axs.plot(p.transpose(), linewidth=LINEWIDTH)
+                save_fig(path=run_path + 'rewards.pdf', artists=artists)
+            except:
+                pass
+
 
 def get_mean_sr(experiment_path, max_len, max_seeds, ref='with_init'):
     conditions = os.listdir(experiment_path)
@@ -267,12 +291,12 @@ for PLOT in TO_PLOT:
     # plot c, lp , p and sr for each run
     plot_c_lp_p_sr(experiment_path)
 
-    if PLOT == 'init_study':
-        sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='with_init')
-    elif PLOT == 'symmetry_bias':
-        sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='without_sym')
-    elif PLOT == 'tests':
-        sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='oldinit_oldlp_pre')
+    # if PLOT == 'init_study':
+    #     sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='with_init')
+    # elif PLOT == 'symmetry_bias':
+    #     sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='without_sym')
+    # elif PLOT == 'tests':
+    #     sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, ref='oldinit_oldlp_pre')
 
 
 
