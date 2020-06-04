@@ -288,7 +288,7 @@ class DeepSetSAC:
             # Parallelization by stacking input tensors
             input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in permutations(obj_input_actor, 2)])
             #input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in combinations(obj_input_actor, 2)])
-
+        self.save_values = self.single_phi_actor(input_actor).numpy()[:,0,:]
         output_phi_actor = self.single_phi_actor(input_actor).sum(dim=0)
         # self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
         if not no_noise:

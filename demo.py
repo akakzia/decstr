@@ -45,8 +45,8 @@ def get_env_params(env):
 
 if __name__ == '__main__':
     num_eval = 10
-    path = '/home/flowers/Desktop/Scratch/sac_curriculum/ignoramus/2020-05-01 17:37:33.000157_curriculum_deepsets/'
-    model_path = path + 'model_0.pt'
+    path = '/home/flowers/Desktop/Scratch/sac_curriculum/results/DECSTR/fucking_models/policy_models/'
+    model_path = path + 'model2.pt'
 
     with open(path + 'config.json', 'r') as f:
         params = json.load(f)
