@@ -75,7 +75,7 @@ def get_dataset(binary=True):
 
     # get synthetic valid goals
     all_valid_goals = []
-    buckets = generate_goals(nb_objects=3, sym=1, asym=1)
+    buckets = generate_goals()
     for b in buckets.values():
         for g in b:
             all_valid_goals.append(np.array(g))
@@ -89,7 +89,6 @@ def get_dataset(binary=True):
     for i_s, s in enumerate(unique_str):
         if s not in all_valid_str:
             all_valid_goals.append(all_configs_dataset[idx[i_s]].astype(np.int))
-    all_valid_str = [str(vg) for vg in all_valid_goals]
 
     # compute all possible transitions between valid goals
     init_finals = []
@@ -100,7 +99,6 @@ def get_dataset(binary=True):
     init_finals = np.array(init_finals)
 
     # construct dataset language
-    # get all possible transitions between configs and corresponding sentence from dataset
     data_configs, data_sentences = label_transitions(unique_reached_config_transitions, predicates, colors, n=1)
     all_possible_configs, all_possible_sentences = label_transitions(init_finals, predicates, colors, n='all')
 
@@ -108,10 +106,6 @@ def get_dataset(binary=True):
     data_configs = np.array(data_configs[:5000])
     data_sentences = data_sentences[:5000]
     all_possible_configs = np.array(all_possible_configs)
-    # sentences_set = set(data_sentences)
-    # print(len(sentences_set))
-    # for i in sentences_set:
-    #     print(i)
 
     if binary:
         data_configs = data_configs[:, :2, :]

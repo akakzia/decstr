@@ -12,7 +12,7 @@ import pickle
 import env
 import gym
 
-SAVE_PATH = "/home/flowers/Desktop/Scratch/sac_curriculum/language/data/"
+SAVE_PATH = "./data/"
 def get_test_sets(configs, sentences, set_inds, states, all_possible_configs, str_to_index):
 
     configs = configs[set_inds]
@@ -226,8 +226,6 @@ def train(vocab, configs, states, device, data_loader, inst_to_one_hot, train_te
 
         for iteration, (init_config, sentence, config, init_state, state) in enumerate(data_loader):
 
-            # init_state = torch.FloatTensor(np.ones(init_state.shape) * 0.7)
-            # state = torch.FloatTensor(np.ones(init_state.shape) * 0.2)
             init_state, state, sentence = init_state.to(device), state.to(device), sentence.to(device)
 
             recon_state, mean, log_var, z = vae(init_state, sentence, state)

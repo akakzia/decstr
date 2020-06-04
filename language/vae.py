@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from language.utils import analyze_inst
 
 def idx2onehot(idx, n):
 

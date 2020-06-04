@@ -176,20 +176,85 @@ def generate_goals(nb_objects=3, sym=1, asym=1):
                      ]}
     return buckets
 
-def generate_all_goals_in_goal_space():
-    goals = []
-    for a in [0, 1]:
-        for b in [0, 1]:
-            for c in [0, 1]:
-                for d in [0, 1]:
-                    for e in [0, 1]:
-                        for f in [0, 1]:
-                            for g in [0, 1]:
-                                for h in [0, 1]:
-                                    for i in [0, 1]:
-                                        goals.append([a, b, c, d, e, f, g, h, i])
 
-    return np.array(goals)
+def analyze_inst(instructions):
+    '''
+    Create vocabulary + extract all instructions splitted and in lower case
+    '''
+    split_instructions = []
+    word_list = []
+    max_sequence_length = 0
+    for inst in instructions:
+        split_inst = inst.lower().split(' ')
+        len_inst = len(split_inst)
+        if len_inst > max_sequence_length:
+            max_sequence_length = len_inst
+        word_list.extend(split_inst)
+        split_instructions.append(split_inst)
+
+    word_set = set(word_list)
+
+    return split_instructions, max_sequence_length, word_set
+
+
+
+
+class Vocab(object):
+    '''
+    Vocabulary class:
+    id2word: mapping of index to word
+    word2id mapping of words to index
+    '''
+
+    def __init__(self, words):
+        word_list = sorted(list(set(words)))
+        self.id2word = dict(zip([0] + [i + 1 for i in range(len(word_list))], ['pad'] + word_list))
+        self.size = len(word_list) + 1  # +1 to account for padding
+        self.word2id = dict(zip(['pad'] + word_list, [0] + [i + 1 for i in range(len(word_list))]))
+
+
+class AbstractEncoder(ABC):
+    '''
+    Encoder must implement function encode and decode and be init with vocab and max_seq_length
+    '''
+
+    def __init__(self, vocab, max_seq_length):
+        self.vocab = vocab
+        self.max_seq_length = max_seq_length
+        super().__init__()
+
+    @abstractmethod
+    def encode(self, instruction):
+        pass
+
+    @abstractmethod
+    def decode(self, sequence):
+        pass
+
+
+class OneHotEncoder(AbstractEncoder):
+
+    def _word2one_hot(self, word):
+        id = self.vocab.word2id[word]
+        out = np.zeros(self.vocab.size)
+        out[id] = 1
+        return out
+
+    def encode(self, split_instruction):
+        one_hot_seq = []
+        for word in split_instruction:
+            one_hot_seq.append(self._word2one_hot(word))
+        while len(one_hot_seq) < self.max_seq_length:
+            one_hot_seq.append(np.zeros(self.vocab.size))
+        return one_hot_seq
+
+    def decode(self, one_hot_seq):
+        words = []
+        for vect in one_hot_seq:
+            if np.sum(vect) > 0:
+                words.append(self.vocab.id2word[np.where(vect > 0)[0][0]])
+        return ' '.join(words)
+
 
 def check_same_plane(config, color1, color2):
     predicates = ['close_0_1',
@@ -421,3 +486,18 @@ def get_list_of_expressions():
 
 
     return expressions
+
+def generate_all_goals_in_goal_space():
+    goals = []
+    for a in [0, 1]:
+        for b in [0, 1]:
+            for c in [0, 1]:
+                for d in [0, 1]:
+                    for e in [0, 1]:
+                        for f in [0, 1]:
+                            for g in [0, 1]:
+                                for h in [0, 1]:
+                                    for i in [0, 1]:
+                                        goals.append([a, b, c, d, e, f, g, h, i])
+
+    return np.array(goals)
