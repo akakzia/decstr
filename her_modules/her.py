@@ -3,7 +3,7 @@ from scipy.linalg import block_diag
 
 
 class her_sampler:
-    def __init__(self, replay_strategy, replay_k, reward_func=None):
+    def __init__(self, replay_strategy, replay_k, continuous=False, reward_func=None):
         self.replay_strategy = replay_strategy
         self.replay_k = replay_k
         if self.replay_strategy == 'future':
@@ -11,6 +11,7 @@ class her_sampler:
         else:
             self.future_p = 0
         self.reward_func = reward_func
+        self.continuous = continuous  # whether to use semantic configurations or continuous goals
 
     def sample_her_transitions(self, episode_batch, batch_size_in_transitions):
         T = episode_batch['actions'].shape[1]
@@ -32,8 +33,18 @@ class her_sampler:
         future_ag = episode_batch['ag'][episode_idxs[her_indexes], future_t]
         transitions['g'][her_indexes] = future_ag
         # to get the params to re-compute reward
-        # transitions['r'] = np.expand_dims(self.reward_func(transitions['ag_next'], transitions['g'], None), 1)
-        transitions['r'] = np.expand_dims(np.array([self.reward_func(ag_next, g, None) for ag_next, g in zip(transitions['ag_next'],
-                                                                                        transitions['g'])]), 1)
 
-        return transitions
+        if self.continuous:
+            transitions['r'] = np.expand_dims(compute_reward(transitions['ag_next'], transitions['g'], None), 1)
+
+            return transitions
+        else:
+            transitions['r'] = np.expand_dims(np.array([self.reward_func(ag_next, g, None) for ag_next, g in zip(transitions['ag_next'],
+                                                                                                                 transitions['g'])]), 1)
+            return transitions
+
+def compute_reward(ag, g, info):
+    dists = []
+    for i in range(3):
+        dists.append(np.linalg.norm(g[:, i * 3: (i+1) * 3] - ag[:, i * 3: (i+1) * 3], axis=1))
+    return (np.array(dists).max(axis=0) < 0.05).astype(np.float32)

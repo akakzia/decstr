@@ -1,5 +1,5 @@
 import torch
-from rl_modules.sac_agent2 import SACAgent
+from rl_modules.sac_agent import SACAgent
 from arguments import get_args
 import env
 import gym
@@ -16,31 +16,6 @@ import pickle
 from copy import deepcopy
 from language.utils import get_corresponding_sentences, get_list_of_expressions
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
-
-# process the inputs
-def normalize_goal(g, g_mean, g_std, args):
-    g_clip = np.clip(g, -args.clip_obs, args.clip_obs)
-    g_norm = np.clip((g_clip - g_mean) / (g_std), -args.clip_range, args.clip_range)
-    return g_norm
-
-
-def normalize(o, o_mean, o_std, args):
-    o_clip = np.clip(o, -args.clip_obs, args.clip_obs)
-    o_norm = np.clip((o_clip - o_mean) / (o_std), -args.clip_range, args.clip_range)
-    return o_norm
-
-
-def process_inputs(o, g, o_mean, o_std, g_mean, g_std, args):
-    o_clip = np.clip(o, -args.clip_obs, args.clip_obs)
-    g_clip = np.clip(g, -args.clip_obs, args.clip_obs)
-    o_norm = np.clip((o_clip - o_mean) / (o_std), -args.clip_range, args.clip_range)
-    g_norm = np.clip((g_clip - g_mean) / (g_std), -args.clip_range, args.clip_range)
-    inputs = np.concatenate([o_norm, g_norm])
-    inputs = torch.tensor(inputs, dtype=torch.float32).unsqueeze(0)
-    return inputs
 
 def get_env_params(env):
     obs = env.reset()
@@ -155,17 +130,13 @@ def rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, val
 
         if not success:
             scores.append(0)
-            # true_sentences = sentence_generator(config_inital, config_final)
-            # check_sentence(true_sentences, expression)
-            # goals_str = sample_vae_logic(vae, inst_to_one_hot, observation['achieved_goal'], expression, valid_goals)
 
-        # print(trial_counter)
 
     return scores.copy()
 
 if __name__ == '__main__':
     num_eval = 10
-    path = '/home/flowers/Desktop/Scratch/sac_curriculum/results/DECSTR/fucking_models/'
+    path = './trained_model/'
 
     with open(path + 'config.json', 'r') as f:
         params = json.load(f)
@@ -201,7 +172,7 @@ if __name__ == '__main__':
     all_goals = generate_all_goals_in_goal_space()
     dict_goals = dict(zip([str(g) for g in all_goals], all_goals))
     all_valid_goals = []
-    buckets = generate_goals(nb_objects=3, sym=1, asym=1)
+    buckets = generate_goals()
     for b in buckets.values():
         for g in b:
             all_valid_goals.append(np.array(g).astype(np.int))
@@ -231,8 +202,8 @@ if __name__ == '__main__':
                             true_eval=True,
                                animated=False)
             scores.append(score)
-        # results = np.array([str(e['g'][0]) == str(e['ag'][-1]) for e in episodes]).astype(np.int)
-        # all_results.append(results)
+
+
         ratio_success = []
         av_not_0 = []
         ratio_first_shot = []

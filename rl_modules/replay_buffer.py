@@ -55,12 +55,11 @@ class MultiBuffer:
                 for key in self.buffer.keys():
                     temp_buffers[key] = self.buffer[key]
             else:
-                # compute goal id proportions to respect LP probas
+                # Compute goal id proportions with respect to LP probas
                 goal_ids = self.goal_sampler.build_batch(batch_size)
 
-                # if a goal id is not in the buffer (discovered but not at the end
-                # of an episode, so not explicitely stored in the buffer
-                # then pick a random episode instead
+                # If a goal id is not in the buffer then pick a random episode instead
+                # This should not happen when discovered goals are configuration achieved at the end of episodes
                 buffer_ids = []
                 for g in goal_ids:
                     buffer_ids_g = np.argwhere(self.goal_ids == g).flatten()

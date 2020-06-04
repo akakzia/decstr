@@ -1,10 +1,9 @@
 import torch
-from rl_modules.sac_agent2 import SACAgent
-from arguments import get_args
+from rl_modules.sac_agent import SACAgent
 import env
 import gym
 import numpy as np
-from utils import generate_goals, generate_all_goals_in_goal_space
+from utils import  generate_all_goals_in_goal_space
 from rollout import RolloutWorker
 import json
 from types import SimpleNamespace
@@ -18,29 +17,6 @@ from language.utils import get_corresponding_sentences
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
-
-# process the inputs
-def normalize_goal(g, g_mean, g_std, args):
-    g_clip = np.clip(g, -args.clip_obs, args.clip_obs)
-    g_norm = np.clip((g_clip - g_mean) / (g_std), -args.clip_range, args.clip_range)
-    return g_norm
-
-
-def normalize(o, o_mean, o_std, args):
-    o_clip = np.clip(o, -args.clip_obs, args.clip_obs)
-    o_norm = np.clip((o_clip - o_mean) / (o_std), -args.clip_range, args.clip_range)
-    return o_norm
-
-
-def process_inputs(o, g, o_mean, o_std, g_mean, g_std, args):
-    o_clip = np.clip(o, -args.clip_obs, args.clip_obs)
-    g_clip = np.clip(g, -args.clip_obs, args.clip_obs)
-    o_norm = np.clip((o_clip - o_mean) / (o_std), -args.clip_range, args.clip_range)
-    g_norm = np.clip((g_clip - g_mean) / (g_std), -args.clip_range, args.clip_range)
-    inputs = np.concatenate([o_norm, g_norm])
-    inputs = torch.tensor(inputs, dtype=torch.float32).unsqueeze(0)
-    return inputs
 
 def get_env_params(env):
     obs = env.reset()
@@ -149,7 +125,7 @@ def rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, env
 
 if __name__ == '__main__':
     num_eval = 20
-    path = '/home/flowers/Desktop/Scratch/sac_curriculum/results/DECSTR/fucking_models/'
+    path = './trained_model/'
 
     with open(path + 'config.json', 'r') as f:
         params = json.load(f)

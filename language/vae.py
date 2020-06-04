@@ -112,8 +112,8 @@ class Decoder(nn.Module):
             if i + 2 < len(layer_sizes):
                 self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
             else:
-                # if binary:
-                self.MLP.add_module(name="sigmoid", module=nn.Sigmoid())
+                if binary:
+                    self.MLP.add_module(name="sigmoid", module=nn.Sigmoid())
 
 
     def forward(self, z):

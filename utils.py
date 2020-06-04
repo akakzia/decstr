@@ -1,64 +1,10 @@
 import numpy as np
 from datetime import datetime
-import itertools
 import os
 import json
-
 import subprocess
 import os.path
 import sys
-import argparse
-
-
-
-def above_to_close(vector):
-    """
-    Given a configuration of above objects, determines a configuration of close objects
-    :param vector:
-    :return:
-    """
-    size = len(vector)
-    res = np.zeros(size//2)
-    for i in range(size//2):
-        if vector[2*i] == 1. or vector[2*i+1] == 1.:
-            res[i] = 1.
-    return tuple(res)
-
-
-def valid(vector):
-    """
-    Determines whether an above configuration is valid or not
-    :param vector:
-    :return:
-    """
-    size = len(vector)
-    if sum(vector) > 2:
-        return False
-    else:
-        """can't have x on y and y on x"""
-        for i in range(size//2):
-            if vector[2*i] == 1. and vector[2*i] == vector[2*i+1]:
-                return False
-        """can't have two blocks on one blocks"""
-        if (vector[0] == 1. and vector[0] == vector[-1]) or \
-                (vector[1] == 1. and vector[1] == vector[3]) or (vector[2] == 1. and vector[2] == vector[4]):
-            return False
-    return True
-
-
-def one_above_two(vector):
-    """
-    Determines whether one block is above two blocks
-    """
-    if (vector[0] == 1. and vector[0] == vector[2]) or \
-            (vector[1] == 1. and vector[1] == vector[-2]) or (vector[3] == 1. and vector[3] == vector[-1]):
-        return True
-    return False
-
-
-stack_three_list = [(1., 1., 0., 1., 0., 0., 1., 0., 0.), (1., 0., 1., 0., 1., 0., 0., 0., 1.),
-                    (1., 1., 0., 0., 1., 1., 0., 0., 0.), (1., 0., 1., 1., 0., 0., 0., 1., 0.),
-                    (0., 1., 1., 0., 0., 1., 0., 0., 1.), (0., 1., 1., 0., 0., 0., 1., 1., 0.)]
 
 
 def generate_all_goals_in_goal_space():
@@ -77,11 +23,8 @@ def generate_all_goals_in_goal_space():
     return np.array(goals)
 
 
-def generate_goals(nb_objects=3, sym=1, asym=1):
-    """
-    generates all the possible goal configurations whether feasible or not, then regroup them into buckets
-    :return:
-    """
+def generate_goals():
+    # Returns expert-defined buckets
     buckets = {0: [(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), (0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
                    (0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)],
 
@@ -114,10 +57,6 @@ def init_storage(args):
     # path to save the model
     if args.curriculum_learning:
         logdir = os.path.join(args.save_dir, '{}_curriculum_{}'.format(datetime.now(), args.architecture))
-        if args.deepsets_attention:
-            logdir += '_attention'
-        if args.double_critic_attention:
-            logdir += '_double'
     else:
         logdir = os.path.join(args.save_dir, '{}_no_curriculum_{}'.format(datetime.now(), args.architecture))
     if args.symmetry_trick:
@@ -177,30 +116,26 @@ def get_stat_func(line='mean', err='std'):
     return line_f, err_minus, err_plus
 
 
-
-"""
-author: Pure Python
-url: https://www.purepython.org
-copyright: CC BY-NC 4.0
-Forked date: 2018-01-07 / First version MIT license -- free to use as you want, cheers.
-Original Author: Sylvain Carlioz, 6/03/2017
-Simple python wrapper script to use ghoscript function to compress PDF files.
-With this class you can compress and or fix a folder with (corrupt) PDF files.
-You can also use this class within your own scripts just do a
-import CompressPDF
-Compression levels:
-    0: default
-    1: prepress
-    2: printer
-    3: ebook
-    4: screen
-Dependency: Ghostscript.
-On MacOSX install via command line `brew install ghostscript`.
-"""
-
-
-
 class CompressPDF:
+    """
+    author: Pure Python
+    url: https://www.purepython.org
+    copyright: CC BY-NC 4.0
+    Forked date: 2018-01-07 / First version MIT license -- free to use as you want, cheers.
+    Original Author: Sylvain Carlioz, 6/03/2017
+    Simple python wrapper script to use ghoscript function to compress PDF files.
+    With this class you can compress and or fix a folder with (corrupt) PDF files.
+    You can also use this class within your own scripts just do a
+    import CompressPDF
+    Compression levels:
+        0: default
+        1: prepress
+        2: printer
+        3: ebook
+        4: screen
+    Dependency: Ghostscript.
+    On MacOSX install via command line `brew install ghostscript`.
+    """
     def __init__(self, compress_level=0, show_info=False):
         self.compress_level = compress_level
 

@@ -19,20 +19,22 @@ class ConfigLanguageDataset(Dataset):
         self.configs = configs[inds].astype(np.float32)
         if continuous is not None:
             self.binary = False
+            sents = self.sentences.copy()
+            self.sentences = [np.expand_dims(s, 0) for s in sents]
             self.continuous = continuous[inds].astype(np.float32)
-
-            unique, idx = np.unique(self.continuous, axis=0, return_inverse=True)
-            conts = []
-            configs = []
-            sentences = []
-            for id in range(unique.shape[0]):
-                ids_in_array = np.argwhere(idx == id).flatten()
-                conts.append(unique[id].copy())
-                configs.append(self.configs[ids_in_array[0]].copy())
-                sentences.append(self.sentences[ids_in_array].copy())
-            self.continuous = np.array(conts).copy()
-            self.configs = np.array(configs).copy()
-            self.sentences = sentences.copy()
+            #
+            # unique, idx = np.unique(self.continuous, axis=0, return_inverse=True)
+            # conts = []
+            # configs = []
+            # sentences = []
+            # for id in range(unique.shape[0]):
+            #     ids_in_array = np.argwhere(idx == id).flatten()
+            #     conts.append(unique[id].copy())
+            #     configs.append(self.configs[ids_in_array[0]].copy())
+            #     sentences.append(self.sentences[ids_in_array].copy())
+            # self.continuous = np.array(conts).copy()
+            # self.configs = np.array(configs).copy()
+            # self.sentences = sentences.copy()
         else:
             self.binary = True
             unique, idx = np.unique(self.configs, axis=0, return_inverse=True)

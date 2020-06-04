@@ -4,8 +4,72 @@ import env
 import gym
 from utils import generate_goals, generate_all_goals_in_goal_space
 
+def label_transitions(transitions, predicates, colors, n='all'):
+    data_configs, data_sentences = [], []
+    # get all possible transitions between configs and corresponding sentence from dataset
+    for transition in transitions:
+        delta = transition[1] - transition[0]
+        sentences = []
+        for i in range(len(predicates)):
+            if delta[i] != 0:
+                p = predicates[i]
+                words = p.split('_')
+                for j in range(len(words)):
+                    try:
+                        words[j] = colors[words[j]]
+                    except:
+                        pass
+                positive = delta[i] == 1
+                if words[0] == 'close':
+                    if positive:
+                        sentences.append('Put {} close_to {}'.format(words[1], words[2]))
+                        sentences.append('Get {} close_to {}'.format(words[1], words[2]))
+                        sentences.append('Put {} close_to {}'.format(words[2], words[1]))
+                        sentences.append('Get {} close_to {}'.format(words[2], words[1]))
+                        sentences.append('Get {} and {} close_from each_other'.format(words[1], words[2]))
+                        sentences.append('Get {} and {} close_from each_other'.format(words[2], words[1]))
+                        sentences.append('Bring {} and {} together'.format(words[1], words[2]))
+                        sentences.append('Bring {} and {} together'.format(words[2], words[1]))
+                    else:
+                        sentences.append('Put {} far_from {}'.format(words[1], words[2]))
+                        sentences.append('Get {} far_from {}'.format(words[1], words[2]))
+                        sentences.append('Put {} far_from {}'.format(words[2], words[1]))
+                        sentences.append('Get {} far_from {}'.format(words[2], words[1]))
+                        sentences.append('Get {} and {} far_from each_other'.format(words[1], words[2]))
+                        sentences.append('Get {} and {} far_from each_other'.format(words[2], words[1]))
+                        sentences.append('Bring {} and {} apart'.format(words[1], words[2]))
+                        sentences.append('Bring {} and {} apart'.format(words[2], words[1]))
+                elif words[0] == 'above':
+                    if positive:
+                        sentences.append('Put {} above {}'.format(words[1], words[2]))
+                        sentences.append('Put {} on_top_of {}'.format(words[1], words[2]))
+                        sentences.append('Put {} under {}'.format(words[2], words[1]))
+                        sentences.append('Put {} below {}'.format(words[2], words[1]))
+                    else:
+                        sentences.append('Remove {} from {}'.format(words[1], words[2]))
+                        sentences.append('Remove {} from_above {}'.format(words[1], words[2]))
+                        sentences.append('Remove {} from_under {}'.format(words[2], words[1]))
+                        sentences.append('Remove {} from_below {}'.format(words[2], words[1]))
+                        sentences.append('Put {} and {} on_the_same_plane'.format(words[1], words[2]))
+                        sentences.append('Put {} and {} on_the_same_plane'.format(words[2], words[1]))
+                else:
+                    raise NotImplementedError
+        if len(sentences) != 0:
+            if n == 'all':
+                data_configs += [transition.copy()] * len(sentences)
+                data_sentences += sentences
+            else:
+                if n > len(sentences):
+                    data_sentences += sentences
+                    data_configs += [transition.copy()] * len(sentences)
+                else:
+                    data_sentences += np.array(np.random.choice(sentences, size=n, replace=False)).flatten().tolist()
+                    data_configs += [transition.copy()] * n
+    return data_configs.copy(), data_sentences.copy()
+
+
 def get_dataset(binary=True):
-    unique_reached_config_transitions, reached_config_transitions, predicates, \
+    unique_reached_config_transitions, predicates, \
     predicate_to_id, id_to_predicate, colors = get_data(binary)
     env = gym.make('FetchManipulate3ObjectsContinuous-v0')
 
@@ -36,75 +100,13 @@ def get_dataset(binary=True):
     init_finals = np.array(init_finals)
 
     # construct dataset language
-    data_configs =  []
-    data_sentences = []
-    all_possible_configs = []
-    all_possible_sentences = []
-    for i in range(len(predicates)):
-        p = predicates[i]
-        words = p.split('_')
-        for j in range(len(words)):
-            try:
-                words[j] = colors[words[j]]
-            except:
-                pass
+    # get all possible transitions between configs and corresponding sentence from dataset
+    data_configs, data_sentences = label_transitions(unique_reached_config_transitions, predicates, colors, n=1)
+    all_possible_configs, all_possible_sentences = label_transitions(init_finals, predicates, colors, n='all')
 
-        for positive in [True, False]:
-            sentences = []
-            if words[0] == 'close':
-                if positive:
-                    sentences.append('Put {} close_to {}'.format(words[1], words[2]))
-                    sentences.append('Get {} close_to {}'.format(words[1], words[2]))
-                    sentences.append('Put {} close_to {}'.format(words[2], words[1]))
-                    sentences.append('Get {} close_to {}'.format(words[2], words[1]))
-                    sentences.append('Get {} and {} close_from each_other'.format(words[1], words[2]))
-                    sentences.append('Get {} and {} close_from each_other'.format(words[2], words[1]))
-                    sentences.append('Bring {} and {} together'.format(words[1], words[2]))
-                    sentences.append('Bring {} and {} together'.format(words[2], words[1]))
-                else:
-                    sentences.append('Put {} far_from {}'.format(words[1], words[2]))
-                    sentences.append('Get {} far_from {}'.format(words[1], words[2]))
-                    sentences.append('Put {} far_from {}'.format(words[2], words[1]))
-                    sentences.append('Get {} far_from {}'.format(words[2], words[1]))
-                    sentences.append('Get {} and {} far_from each_other'.format(words[1], words[2]))
-                    sentences.append('Get {} and {} far_from each_other'.format(words[2], words[1]))
-                    sentences.append('Bring {} and {} apart'.format(words[1], words[2]))
-                    sentences.append('Bring {} and {} apart'.format(words[2], words[1]))
-            elif words[0] == 'above':
-                if positive:
-                    sentences.append('Put {} above {}'.format(words[1], words[2]))
-                    sentences.append('Put {} on_top_of {}'.format(words[1], words[2]))
-                    sentences.append('Put {} under {}'.format(words[2], words[1]))
-                    sentences.append('Put {} below {}'.format(words[2], words[1]))
-                else:
-                    sentences.append('Remove {} from {}'.format(words[1], words[2]))
-                    sentences.append('Remove {} from_above {}'.format(words[1], words[2]))
-                    sentences.append('Remove {} from_under {}'.format(words[2], words[1]))
-                    sentences.append('Remove {} from_below {}'.format(words[2], words[1]))
-                    sentences.append('Put {} and {} on_the_same_plane'.format(words[1], words[2]))
-                    sentences.append('Put {} and {} on_the_same_plane'.format(words[2], words[1]))
-            else:
-                raise NotImplementedError
 
-            # get all possible transitions between configs and corresponding sentence from dataset
-            for transition in unique_reached_config_transitions:
-                if positive and transition[1][i] == transition[0][i] + 1:
-                    data_configs += [transition.copy()] * len(sentences)
-                    data_sentences += sentences
-                elif not positive and transition[1][i] == transition[0][i] - 1:
-                    data_configs += [transition.copy()] * len(sentences)
-                    data_sentences += sentences
-
-            # get all possible transitions between valid configs and corresponding sentence (synthetic)
-            for transition in init_finals:
-                if positive and transition[1][i] == transition[0][i] + 1:
-                    all_possible_configs += [transition.copy()] * len(sentences)
-                    all_possible_sentences += sentences
-                elif not positive and transition[1][i] == transition[0][i] - 1:
-                    all_possible_configs += [transition.copy()] * len(sentences)
-                    all_possible_sentences += sentences
-
-    data_configs = np.array(data_configs)
+    data_configs = np.array(data_configs[:5000])
+    data_sentences = data_sentences[:5000]
     all_possible_configs = np.array(all_possible_configs)
     # sentences_set = set(data_sentences)
     # print(len(sentences_set))
