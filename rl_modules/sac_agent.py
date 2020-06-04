@@ -82,7 +82,14 @@ class SACAgent:
             self.alpha_optim = torch.optim.Adam([self.log_alpha], lr=self.args.lr_entropy)
 
         # her sampler
-        self.continuous_goals = True if 'Continuous' in args.env_name else False
+        if args.algo == 'continuous':
+            self.continuous_goals = True
+        else:
+            self.continuous_goals = False
+        if args.algo == 'language':
+            self.language = True
+        else:
+            self.language = False
         self.her_module = her_sampler(self.args.replay_strategy, self.args.replay_k, self.continuous_goals, compute_rew)
 
         # create the replay buffer
@@ -99,19 +106,17 @@ class SACAgent:
         with torch.no_grad():
             # normalize policy inputs 
             obs_norm = self.o_norm.normalize(obs)
-            g_norm = torch.tensor(self.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
             ag_norm = torch.tensor(self.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
 
+            if self.language:
+                g_norm = g
+            else:
+                g_norm = torch.tensor(self.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
             if self.architecture == 'deepsets':
                 obs_tensor = torch.tensor(obs_norm, dtype=torch.float32).unsqueeze(0)
                 self.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, no_noise=no_noise)
                 action = self.model.pi_tensor.numpy()[0]
-                
-            elif self.architecture == 'disentangled':
-                z_ag = self.configuration_network(ag_norm)[0]
-                z_g = self.configuration_network(g_norm)[0]
-                input_tensor = torch.tensor(np.concatenate([obs_norm, z_ag, z_g]), dtype=torch.float32).unsqueeze(0)
-                action = self._select_actions(input_tensor, no_noise=no_noise)
+
             else:
                 input_tensor = self._preproc_inputs(obs, g)  # PROCESSING TO CHECK
                 action = self._select_actions(input_tensor, no_noise=no_noise)
@@ -209,7 +214,10 @@ class SACAgent:
 
         # apply normalization
         obs_norm = self.o_norm.normalize(transitions['obs'])
-        g_norm = self.g_norm.normalize(transitions['g'])
+        if self.language:
+            g_norm = transitions['g']
+        else:
+            g_norm = self.g_norm.normalize(transitions['g'])
         ag_norm = self.g_norm.normalize(transitions['ag'])
         obs_next_norm = self.o_norm.normalize(transitions['obs_next'])
         ag_next_norm = self.g_norm.normalize(transitions['ag_next'])
@@ -221,7 +229,7 @@ class SACAgent:
                                                                            self.target_entropy, self.alpha_optim, obs_norm, g_norm, obs_next_norm,
                                                                            actions, rewards, self.args)
         elif self.architecture == 'deepsets':
-            critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs = update_deepsets(self.model, self.policy_optim, self.critic_optim,
+            critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs = update_deepsets(self.model, self.language, self.policy_optim, self.critic_optim,
                                                                                self.alpha, self.log_alpha, self.target_entropy,
                                                                                self.alpha_optim, obs_norm, ag_norm, g_norm, obs_next_norm,
                                                                                ag_next_norm, actions, rewards, self.args)

@@ -50,6 +50,78 @@ def generate_goals():
                      ]}
     return buckets
 
+def get_instruction():
+    buckets = generate_goals()
+
+    all_goals = generate_all_goals_in_goal_space().astype(np.float32)
+    valid_goals = []
+    for k in buckets.keys():
+        # if k < 4:
+        valid_goals += buckets[k]
+    valid_goals = np.array(valid_goals)
+    all_goals = np.array(all_goals)
+    num_goals = all_goals.shape[0]
+    all_goals_str = [str(g) for g in all_goals]
+    valid_goals_str = [str(vg) for vg in valid_goals]
+
+    # initialize dict to convert from the oracle id to goals and vice versa.
+    # oracle id is position in the all_goal array
+    g_str_to_oracle_id = dict(zip(all_goals_str, range(num_goals)))
+
+    instructions = ['Bring blocks away_from each_other',
+                    'Bring blue close_to green and red far',
+                    'Bring blue close_to red and green far',
+                    'Bring green close_to red and blue far',
+                    'Bring blue close_to red and green',
+                    'Bring green close_to red and blue',
+                    'Bring red close_to green and blue',
+                    'Bring all blocks close',
+                    'Stack blue on green and red far',
+                    'Stack green on blue and red far',
+                    'Stack blue on red and green far',
+                    'Stack red on blue and green far',
+                    'Stack green on red and blue far',
+                    'Stack red on green and blue far',
+                    'Stack blue on green and red close_from green',
+                    'Stack green on blue and red close_from blue',
+                    'Stack blue on red and green close_from red',
+                    'Stack red on blue and green close_from blue',
+                    'Stack green on red and blue close_from red',
+                    'Stack red on green and blue close_from green',
+                    'Stack blue on green and red close_from both',
+                    'Stack green on blue and red close_from both',
+                    'Stack blue on red and green close_from both',
+                    'Stack red on blue and green close_from both',
+                    'Stack green on red and blue close_from both',
+                    'Stack red on green and blue close_from both',
+                    'Stack green on red and blue',
+                    'Stack red on green and blue',
+                    'Stack blue on green and red',
+                    'Stack green on blue and blue on red',
+                    'Stack red on blue and blue on green',
+                    'Stack blue on green and green on red',
+                    'Stack red on green and green on blue',
+                    'Stack green on red and red on blue',
+                    'Stack blue on red and red on green',
+                    ]
+    words = ['stack', 'green', 'blue', 'on', 'red', 'and', 'close_from', 'both', 'far', 'close', 'all', 'bring', 'blocks', 'away_from', 'close_to']
+    length = set()
+    for s in instructions:
+        if len(s) not in length:
+            length.add(len(s.split(' ')))
+
+
+    oracle_id_to_inst = dict()
+    g_str_to_inst = dict()
+    for g_str, oracle_id in g_str_to_oracle_id.items():
+        if g_str in valid_goals_str:
+            inst = instructions[valid_goals_str.index(g_str)]
+        else:
+            inst = ' '.join(np.random.choice(words, size=np.random.choice(list(length))))
+        g_str_to_inst[g_str] = inst
+        oracle_id_to_inst[g_str] = inst
+
+    return oracle_id_to_inst, g_str_to_inst
 
 def init_storage(args):
     if not os.path.exists(args.save_dir):

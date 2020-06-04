@@ -4,6 +4,8 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 from itertools import permutations
 import numpy as np
+from language.utils import OneHotEncoder, analyze_inst, Vocab
+from utils import get_instruction
 
 LOG_SIG_MAX = 2
 LOG_SIG_MIN = -20
@@ -127,8 +129,7 @@ class DeepSetSAC:
         self.num_blocks = 3
         self.n_permutations = len([x for x in permutations(range(self.num_blocks), 2)])
 
-        self.include_ag = False if 'Continuous' in args.env_name else True
-        if 'Continuous' in args.env_name:
+        if args.algo == 'continuous' or args.algo == 'language':
             self.symmetry_trick = False
             self.include_ag = False
         else:
@@ -138,6 +139,33 @@ class DeepSetSAC:
             self.first_inds = np.array([0, 1, 2, 3, 5, 7])
             self.second_inds = np.array([0, 1, 2, 4, 6, 8])
             self.dim_goal = 6
+
+        if args.algo == 'language':
+            self.language = True
+            self.instruction_dict, self.g_str_to_inst = get_instruction()
+            sentences = list(self.instruction_dict.values())
+
+            set_sentences = set(sentences)
+            split_instructions, max_seq_length, word_set = analyze_inst(set_sentences)
+            vocab = Vocab(word_set)
+            self.one_hot_encoder = OneHotEncoder(vocab, max_seq_length)
+            self.one_hot_language = dict(zip(self.g_str_to_inst.keys(), [self.one_hot_encoder.encode(s) for s in split_instructions]))
+
+            self.policy_sentence_encoder = nn.RNN(input_size=len(word_set) + 1,
+                                                  hidden_size=100,
+                                                  num_layers=1,
+                                                  nonlinearity='tanh',
+                                                  bias=True,
+                                                  batch_first=True)
+
+            self.critic_sentence_encoder = nn.RNN(input_size=len(word_set) + 1,
+                                                  hidden_size=100,
+                                                  num_layers=1,
+                                                  nonlinearity='tanh',
+                                                  bias=True,
+                                                  batch_first=True)
+        else:
+            self.language = False
 
         # double_critic_attention = double_critic_attention
         self.one_hot_encodings = [torch.tensor([1., 0., 0.]), torch.tensor([0., 1., 0.]), torch.tensor([0., 0., 1.])]
@@ -151,10 +179,13 @@ class DeepSetSAC:
 
         # Define dimensions according to parameters use_attention
         # if attention not used, then concatenate [g, ag] in input ==> dimension = 2 * dim_goal
-        if self.include_ag:
-            dim_input_goals = 2 * self.dim_goal
+        if self.language:
+            dim_input_goals = 100
         else:
-            dim_input_goals = self.dim_goal
+            if self.include_ag:
+                dim_input_goals = 2 * self.dim_goal
+            else:
+                dim_input_goals = self.dim_goal
 
         dim_input_objects = 2 * (self.num_blocks + self.dim_object)
 
@@ -187,6 +218,11 @@ class DeepSetSAC:
         self.ag = ag
         self.g = g
 
+        if self.language:
+            encodings = np.array(self.one_hot_language[str(g)])
+            encodings = torch.tensor(encodings, dtype=torch.float32).unsqueeze(0)
+            goal_embeddings = self.policy_sentence_encoder.forward(encodings)[0][:, -1, :]
+
         obs_body = self.observation.narrow(-1, start=0, length=self.dim_body)
         obs_objects = [torch.cat((torch.cat(obs_body.shape[0] * [self.one_hot_encodings[i]]).reshape(obs_body.shape[0], self.num_blocks),
                                   self.observation.narrow(-1, start=self.dim_object*i + self.dim_body, length=self.dim_object)),
@@ -206,10 +242,15 @@ class DeepSetSAC:
             input_actor = torch.stack(all_inputs)
 
         else:
-            body_input_actor = torch.cat([self.g, obs_body], dim=1)
+            if self.language:
+                body_input_actor = torch.cat([goal_embeddings, obs_body], dim=1)
+            else:
+                body_input_actor = torch.cat([self.g, obs_body], dim=1)
             obj_input_actor = [obs_objects[i] for i in range(self.num_blocks)]
 
             # Parallelization by stacking input tensors
+
+
             if not self.include_ag:
                 input_actor = torch.stack([torch.cat([body_input_actor, x[0], x[1]], dim=1) for x in permutations(obj_input_actor, 2)])
             else:
@@ -229,6 +270,10 @@ class DeepSetSAC:
         self.ag = ag
         self.g = g
 
+        if self.language:
+            encodings = np.array([self.one_hot_language[str(sg)] for sg in g])
+            encodings = torch.tensor(encodings, dtype=torch.float32)
+            goal_embeddings = self.policy_sentence_encoder.forward(encodings)[0][:, -1, :]
         obs_body = self.observation[:, :self.dim_body]
         obs_objects = [torch.cat((torch.cat(batch_size * [self.one_hot_encodings[i]]).reshape(obs_body.shape[0], self.num_blocks),
                                obs[:, self.dim_body + self.dim_object * i: self.dim_body + self.dim_object * (i + 1)]), dim=1)
@@ -248,8 +293,10 @@ class DeepSetSAC:
             input_actor = torch.stack(all_inputs)
 
         else:
-
-            body_input = torch.cat([self.g, obs_body], dim=1)
+            if self.language:
+                body_input = torch.cat([goal_embeddings, obs_body], dim=1)
+            else:
+                body_input = torch.cat([self.g, obs_body], dim=1)
             obj_input = [obs_objects[i] for i in range(self.num_blocks)]
 
             # Parallelization by stacking input tensors

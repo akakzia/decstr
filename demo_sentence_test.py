@@ -74,16 +74,15 @@ def sample_vae_logic(vae, inst_to_one_hot, config_init, expression, dict_goals, 
 
 
 def rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, env, policy, env_params, inits, goals, self_eval, true_eval, biased_init=False, animated=False):
-    episodes = []
-
 
     score = []
+
     for sentence in sentences:
         sentence = sentence.lower()
-        # print(sentence)
+        print('\nNew instruction: ', sentence)
         reached = False
-        observation = env.unwrapped.reset_goal(np.array(goals[i]), init=inits[i], biased_init=biased_init)
-        # env.render()
+        observation = env.unwrapped.reset_goal(np.array(goals[i]), biased_init=biased_init)
+
         config_initial = observation['achieved_goal'].copy()
         if sentence.lower() in inst_to_one_hot.keys():
             counter = 0
@@ -114,21 +113,23 @@ def rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, env
                 if sentence in true_sentences:
                     score.append(counter)
                     reached = True
-                    # print(counter)
+                    print('\tSuccess!')
                     break
+                else:
+                    print('\tFailed. Trying again.')
 
         else:
             print('Wrong sentence.')
 
         if not reached:
             score.append(0)
-            # true_sentences = sentence_generator(config_initial, config_final)
+            print('\tFailed 5 times, Moving On.')
 
     return np.array(score)
 
 if __name__ == '__main__':
     num_eval = 5
-    path = '/home/flowers/Desktop/Scratch/sac_curriculum/results/DECSTR/fucking_models/'
+    path = './trained_model/'
 
     with open(path + 'config.json', 'r') as f:
         params = json.load(f)
@@ -163,46 +164,53 @@ if __name__ == '__main__':
     sentence_generator = get_corresponding_sentences
     all_goals = generate_all_goals_in_goal_space()
     dict_goals = dict(zip([str(g) for g in all_goals], all_goals))
-    vae_scores = []
-    for vae_id in range(9,10):
-        model_path = path + '/policy_models/model{}.pt'.format(vae_id + 1)
 
-        # create the sac agent to interact with the environment
-        if args.agent == "SAC":
-            policy = SACAgent(args, env.compute_reward, goal_sampler)
-            policy.load(model_path, args)
-        else:
-            raise NotImplementedError
+    # Load policy
+    model_path = path + 'policy_model.pt'
+    # create the sac agent to interact with the environment
+    if args.agent == "SAC":
+        policy = SACAgent(args, env.compute_reward, goal_sampler)
+        policy.load(model_path, args)
+    else:
+        raise NotImplementedError
 
-        # def rollout worker
-        rollout_worker = RolloutWorker(env, policy, goal_sampler, args)
+    # Initialize Rollout Worker
+    rollout_worker = RolloutWorker(env, policy, goal_sampler, args)
 
-        with open(path + 'vae_models/vae_model{}.pkl'.format(vae_id + 1), 'rb') as f:
-            vae = torch.load(f)
+    # Load vae model
+    with open(path + 'vae_model.pkl', 'rb') as f:
+        vae = torch.load(f)
 
-        scores = []
-        for i in range(num_eval):
-            print(i)
-            score = rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, env, policy, args.env_params, inits, eval_goals, self_eval=True, true_eval=True,
-                               animated=False)
-            scores.append(score)
-        # results = np.array([str(e['g'][0]) == str(e['ag'][-1]) for e in episodes]).astype(np.int)
-        # all_results.append(results)
+    scores = []
+    for i in range(num_eval):
+        print(i)
+        score = rollout(sentence_generator,
+                        vae,
+                        sentences,
+                        inst_to_one_hot,
+                        dict_goals,
+                        env,
+                        policy,
+                        args.env_params,
+                        inits,
+                        eval_goals,
+                        self_eval=True,
+                        true_eval=True,
+                        animated=True)
+        scores.append(score)
 
-        ratio_success = []
-        av_not_0 = []
-        ratio_first_shot = []
-        for r in np.array(scores):
-            inds_not_0 = np.argwhere(r > 0).flatten()
-            ratio_success.append(inds_not_0.size / r.size)
-            ratio_first_shot.append(np.argwhere(r == 1).flatten().size / r.size)
-            av_not_0.append(r[inds_not_0].mean())
-        print('Success rate (5 attempts): ', np.mean(ratio_success))
-        print('Success rate (first_shot): ', np.mean(ratio_first_shot))
-        print('When success, average nb of attempts: ', np.mean(av_not_0))
-        vae_scores.append([np.mean(ratio_success), np.mean(ratio_first_shot)])
-        results = np.array(vae_scores)
-        np.savetxt(path + 'sentence_test.txt', results)
+    ratio_success = []
+    av_not_0 = []
+    ratio_first_shot = []
+    for r in np.array(scores):
+        inds_not_0 = np.argwhere(r > 0).flatten()
+        ratio_success.append(inds_not_0.size / r.size)
+        ratio_first_shot.append(np.argwhere(r == 1).flatten().size / r.size)
+        av_not_0.append(r[inds_not_0].mean())
+    print('Success rate (5 attempts): ', np.mean(ratio_success))
+    print('Success rate (first_shot): ', np.mean(ratio_first_shot))
+    print('When success, average nb of attempts: ', np.mean(av_not_0))
+
 
 
 

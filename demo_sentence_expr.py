@@ -16,6 +16,7 @@ import pickle
 from copy import deepcopy
 from language.utils import get_corresponding_sentences, get_list_of_expressions
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def get_env_params(env):
     obs = env.reset()
@@ -92,8 +93,10 @@ def rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, val
     expressions = get_list_of_expressions()
 
     scores = []
+    np.random.shuffle(expressions)
     for expression in expressions:
-        observation = env.unwrapped.reset_goal(np.array(goals[i]), init=inits[i], biased_init=biased_init)
+        print('\nAttempting expression: ', expression)
+        observation = env.unwrapped.reset_goal(np.array(goals[i]), biased_init=biased_init)
         config_inital = observation['achieved_goal'].copy()
         trial_counter = 0
         success = False
@@ -126,10 +129,14 @@ def rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, val
                 if check_sentence(true_sentences, expression):
                     scores.append(trial_counter)
                     success = True
+                    print('Success!')
                     break
+                else:
+                    print('\tFailed. Trying again.')
 
         if not success:
             scores.append(0)
+            print('\tFailed 5 times, Moving On.')
 
 
     return scores.copy()
@@ -178,48 +185,52 @@ if __name__ == '__main__':
             all_valid_goals.append(np.array(g).astype(np.int))
     valid_goals = dict(zip([str(g) for g in all_valid_goals], all_valid_goals))
 
-    vae_scores = []
-    for vae_id in range(9, 10):
-        model_path = path + '/policy_models/model{}.pt'.format(vae_id + 1)
+    # Load policy
+    model_path = path + 'policy_model.pt'
+    # create the sac agent to interact with the environment
+    if args.agent == "SAC":
+        policy = SACAgent(args, env.compute_reward, goal_sampler)
+        policy.load(model_path, args)
+    else:
+        raise NotImplementedError
 
-        # create the sac agent to interact with the environment
-        if args.agent == "SAC":
-            policy = SACAgent(args, env.compute_reward, goal_sampler)
-            policy.load(model_path, args)
-        else:
-            raise NotImplementedError
+    # Initialize Rollout Worker
+    rollout_worker = RolloutWorker(env, policy, goal_sampler, args)
 
-        # def rollout worker
-        rollout_worker = RolloutWorker(env, policy, goal_sampler, args)
+    # Load vae model
+    with open(path + 'vae_model.pkl', 'rb') as f:
+        vae = torch.load(f)
 
-        with open(path + 'vae_models/vae_model{}.pkl'.format(vae_id + 1), 'rb') as f:
-            vae = torch.load(f)
+    scores = []
+    for i in range(num_eval):
+        print(i)
+        score = rollout(sentence_generator,
+                        vae,
+                        sentences,
+                        inst_to_one_hot,
+                        dict_goals,
+                        valid_goals,
+                        env, policy,
+                        args.env_params,
+                        inits,
+                        eval_goals,
+                        self_eval=True,
+                        true_eval=True,
+                        animated=True)
+        scores.append(score)
 
-        scores = []
-        for i in range(num_eval):
-            print(i)
-            score = rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, valid_goals, env, policy, args.env_params, inits, eval_goals, self_eval=True,
-                            true_eval=True,
-                               animated=False)
-            scores.append(score)
 
-
-        ratio_success = []
-        av_not_0 = []
-        ratio_first_shot = []
-        for r in np.array(scores):
-            inds_not_0 = np.argwhere(r > 0).flatten()
-            ratio_success.append(inds_not_0.size / r.size)
-            ratio_first_shot.append(np.argwhere(r == 1).flatten().size / r.size)
-            av_not_0.append(r[inds_not_0].mean())
-        print('Success rate (5 attempts): ', np.mean(ratio_success))
-        print('Success rate (first_shot): ', np.mean(ratio_first_shot))
-        print('When success, average nb of attempts: ', np.mean(av_not_0))
-
-        vae_scores.append([np.mean(ratio_success), np.mean(ratio_first_shot)])
-
-        results = np.array(vae_scores)
-        np.savetxt(path + 'sentence_expr.txt', results)
+    ratio_success = []
+    av_not_0 = []
+    ratio_first_shot = []
+    for r in np.array(scores):
+        inds_not_0 = np.argwhere(r > 0).flatten()
+        ratio_success.append(inds_not_0.size / r.size)
+        ratio_first_shot.append(np.argwhere(r == 1).flatten().size / r.size)
+        av_not_0.append(r[inds_not_0].mean())
+    print('Success rate (5 attempts): ', np.mean(ratio_success))
+    print('Success rate (first_shot): ', np.mean(ratio_first_shot))
+    print('When success, average nb of attempts: ', np.mean(av_not_0))
 
 
 

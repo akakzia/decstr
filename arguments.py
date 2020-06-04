@@ -12,14 +12,14 @@ Here are the param for the training
 def get_args():
     parser = argparse.ArgumentParser()
     # the environment setting
-    parser.add_argument('--env-name', type=str, default='FetchManipulate3ObjectsContinuous-v0', help='the environment name')
+    parser.add_argument('--env-name', type=str, default='FetchManipulate3Objects-v0', help='the environment name')
+    parser.add_argument('--algo', type=str, default='language', help="'semantic', 'continuous', 'language'")
     parser.add_argument('--agent', type=str, default='SAC', help='the agent name')
     parser.add_argument('--n-epochs', type=int, default=1000, help='the number of epochs to train the agent')
     parser.add_argument('--n-cycles', type=int, default=5, help='the times to collect samples per epoch')
     parser.add_argument('--n-batches', type=int, default=3, help='the times to update the network')
     parser.add_argument('--biased-init', type=bool, default=True, help='use biased environment initializations')
     parser.add_argument('--automatic-buckets', type=bool, default=False, help='automatically generate buckets during training')
-    parser.add_argument('--use-pairs', type=bool, default=False, help='use pairs of goals for buckets')
     parser.add_argument('--num-buckets', type=int, default=5, help='number of buckets for automatic generation')
     parser.add_argument('--symmetry-trick', type=bool, default=True, help='experimental stuff from Cédric')
     parser.add_argument('--normalize_goal', type=bool, default=True, help='do evaluation at the end of the epoch w/ frequency')
@@ -53,9 +53,6 @@ def get_args():
 
     # Curriculum learning arguments
     parser.add_argument('--curriculum-learning', type=bool, default=True, help='Use LP-based curriculum learning')
-    parser.add_argument('--curriculum-eps', type=float, default=0.3, help='Prob of sampling random goal in curriculum')
-    parser.add_argument('--curriculum-nu', type=float, default=1., help='Hyperparameter for p formula')
-    parser.add_argument('--curriculum-beta', type=float, default=1., help='Hyperparameter for p formula')
     parser.add_argument('--multihead-buffer', type=bool, default=True, help='use a multihead replay buffer in curriculum')
     parser.add_argument('--queue-length', type=int, default=1800, help='The window size when computing competence')
 
