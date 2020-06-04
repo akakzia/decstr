@@ -10,6 +10,9 @@
 	<worldbody>
 		<geom name="floor0" pos="0.9 0.75 0" size="1. 0.9 1" rgba="0.02 0.18 0.29 1" type="plane" condim="3" material="floor_mat"></geom>
 		<body name="floor0" pos="0.8 0.75 0">
+            <site name="target0" pos="0 0 0.5" size="0.02 0.02 0.02" rgba="1 0 0 1" type="sphere"></site>
+            <site name="target1" pos="0 0 0.5" size="0.02 0.02 0.02" rgba="0 1 0 1" type="sphere"></site>
+            <site name="target2" pos="0 0 0.5" size="0.02 0.02 0.02" rgba="0 0 1 1" type="sphere"></site>
 		</body>
 
 		<include file="robot.xml"></include>
