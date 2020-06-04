@@ -12,7 +12,7 @@ import pickle
 import env
 import gym
 
-SAVE_PATH = '/home/flowers/Desktop/Scratch/sac_curriculum/language/data/'
+SAVE_PATH = './data/'
 def get_test_sets(configs, sentences, set_inds, all_possible_configs, str_to_index):
 
     configs = configs[set_inds]
@@ -22,10 +22,10 @@ def get_test_sets(configs, sentences, set_inds, all_possible_configs, str_to_ind
     for i in range(configs.shape[0]):
         config_init_and_sentence.append(str(configs[i, 0]) + sentences[i])
     unique, idx, idx_in_array = np.unique(np.array(config_init_and_sentence), return_inverse=True, return_index=True)
-    train_inits = []
-    train_sents = []
-    train_finals_dataset = []
-    train_finals_possible = []
+    train_inits = []  # contains initial configurations
+    train_sents = []  # contains sentences
+    train_finals_dataset = []  # contains all compatible final configurations found in data
+    train_finals_possible = []  # contains all compatible final configurations (oracle)
     for i, i_array in enumerate(idx):
         train_inits.append(configs[i_array, 0])
         train_sents.append(sentences[i_array])
@@ -48,9 +48,7 @@ def main(args):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    ts = time.time()
 
-    np.random.seed(943930)
     configs, sentences, _, all_possible_configs, all_possible_sentences = get_dataset()
 
 
@@ -63,32 +61,23 @@ def main(args):
         inst_to_one_hot[' '.join(s_instr)] = one_hot_encoder.encode(s_instr)
 
 
-    # with open(SAVE_PATH + 'inst_to_one_hot.pkl', 'wb') as f:
-    #     pickle.dump(inst_to_one_hot, f)
-
     all_str = ['start' + str(c[0]) + s + str(c[1]) +'end' for c, s in zip(configs, sentences)]
     all_possible_configs_str = [str(c[0]) + s for c, s in zip(all_possible_configs, all_possible_sentences)]
 
-    # test particular combinations of init, sentence, final
-    # this tests the extrapolation to different final states than the ones in train set
-    # remove1 = [[[0, 0, 1, 0, 0, 0, 0, 0, 0], 'Put red close_to green', [1, 1, 0, 0, 1, 0, 0, 0, 0]],
-    #            [[0, 0, 1, 0, 0, 0, 0, 0, 0], 'Put blue above red', [0, 1, 0, 0, 0, 0, 1, 0, 0]],
-    #            [[0, 0, 0, 0, 0, 0, 0, 0, 0], 'Get blue and green close_from each_other', [0, 1, 1, 0, 0, 0, 1, 1, 0]],
-    #            [[0, 0, 0, 0, 0, 0, 0, 0, 0], 'Put blue on_top_of green', [0, 0, 1, 0, 0, 0, 0, 0, 1]],
-    #            [[0, 1, 1, 0, 0, 0, 0, 0, 0], 'Get green and blue far_from each_other', [0, 1, 0, 0, 0, 0, 0, 0, 0]]]
-    # remove1_str = ['start' + str(np.array(r[0])) + r[1] + str(np.array(r[2])) for r in remove1]
-
+    # Test set 1
     remove1 = [[[0, 1, 0, 0, 0, 0, 0, 0, 0], 'Put blue close_to green'],
                [[0, 0, 1, 0, 0, 0, 0, 0, 0], 'Put green below red']]
     remove1_str = ['start' +  str(np.array(r[0])) + r[1] for r in remove1]
 
+    # Test set 2
     remove2 = [[1, 1, 0, 0, 0, 0, 0, 0, 0]]
     remove2_str = ['start' + str(np.array(r)) for r in remove2]
+
+    # Test set 3
     remove3 = ['Put green on_top_of red', 'Put blue far_from red']
     remove3_str = remove3.copy()
 
-    # what about removing all of one final state, or combinations of sentence and final state, or init and final ?
-
+    # Find indices of the different sets in the total dataset.
     set_inds = [[] for _ in range(5)]
     inds_final = []
     for i, s in enumerate(all_str):
@@ -96,14 +85,7 @@ def main(args):
         to_remove = False
 
         used = False
-        # for s1 in remove1_str:
-        #     if s1 in s:
-        #         set_inds[1].append(i)
-        #         used = True
-        #         break
-        if '[1 0 1 1 0 0 0 1 0]end' in s:
-            used = True
-            inds_final.append(i)
+
         if not used:
             for s1 in remove1_str:
                 if s1 in s:
@@ -145,7 +127,7 @@ def main(args):
     assert np.sum([len(ind) for ind in set_inds]) + len(inds_final) == len(all_str)
 
     for i, s in enumerate(set_inds):
-        print('Set ', i, ': ', len(s))
+        print('Len Set ', i, ': ', len(s))
 
     # dictionary translating string of init config and sentence to all possible final config (id in all_possible_configs)
     # including the ones in the dataset, but also other synthetic ones. This is used for evaluation
@@ -186,13 +168,11 @@ def train(vocab, configs, device, data_loader, inst_to_one_hot, train_test_data,
 
     logs = defaultdict(list)
 
-    # stops = [50, 75, 100, 125, 150]
     results = np.zeros([len(set_inds), 8])
 
     for epoch in range(args.epochs + 1):
         for iteration, (init_state, sentence, state) in enumerate(data_loader):
-            # init_state = torch.FloatTensor(np.ones(init_state.shape) * 0.7)
-            # state = torch.FloatTensor(np.ones(init_state.shape) * 0.2)
+
             init_state, state, sentence = init_state.to(device), state.to(device), sentence.to(device)
 
 
@@ -207,35 +187,10 @@ def train(vocab, configs, device, data_loader, inst_to_one_hot, train_test_data,
 
             logs['loss'].append(loss.item())
 
-        # if epoch % args.print_every == 0:
-        #     print("Epoch {:02d}/{:02d} Batch {:04d}/{:d}, Loss {:9.4f}".format(
-        #         epoch, args.epochs, iteration, len(data_loader)-1, loss.item()))
-        #
-        #
-        #     score = 0
-        #     score_dataset = 0
-        #     for c_i, s, c_f_dataset, c_f_possible in zip(*train_test_data):
-        #         one_hot = np.expand_dims(np.array(inst_to_one_hot[s.lower()]), 0)
-        #         c_i = np.expand_dims(c_i, 0)
-        #         c_i, s = torch.Tensor(c_i).to(device), torch.Tensor(one_hot).to(device)
-        #         x = (vae.inference(c_i, s, n=1).detach().numpy().flatten()>0.5).astype(np.int)
-        #         # x = vae.inference(c_i, s, n=1).detach().numpy().flatten() * 2 - 1
-        #         # x[np.argwhere(x > 0.33).flatten()] = 1
-        #         # x[np.argwhere(x < -0.33).flatten()] = -1
-        #         # x[np.argwhere(np.logical_and(x > -0.33, x < 0.33)).flatten()] = 0
-        #         # x = x + c_i.numpy().flatten()
-        #         # x = x.astype(np.int)
-        #         if str(x) in c_f_possible:
-        #             score += 1
-        #         if str(x) in c_f_dataset:
-        #             score_dataset += 1
-        #     print('Score train set: possible : {}, dataset : {}'.format(score / len(train_test_data[0]), score_dataset / len(train_test_data[0])))
-
-        #
     with open(SAVE_PATH + 'vae_model{}.pkl'.format(vae_id), 'wb') as f:
         torch.save(vae, f)
 
-        # test train statistics
+    # test train statistics
     factor = 100
     for i_gen in range(len(set_inds)):
         if i_gen == 0:
@@ -252,8 +207,6 @@ def train(vocab, configs, device, data_loader, inst_to_one_hot, train_test_data,
         nb_cf_dataset = []
         found_beyond_dataset = []
         valid_goals = []
-        total_missing_final = 0
-        total_found_final = 0
         data_set = get_test_sets(configs, sentences, set_inds[i_gen], all_possible_configs, str_to_index)
         for c_i, s, c_f_dataset, c_f_possible in zip(*data_set):
             c_f_possible = set(c_f_possible)
@@ -274,13 +227,6 @@ def train(vocab, configs, device, data_loader, inst_to_one_hot, train_test_data,
             count_found_possible = 0
             count_found_not_dataset = 0
             count_false_pred = 0
-            # count coverage of final configs in dataset
-            if '[1 0 1 1 0 0 0 1 0]' in c_f_possible:
-                total_missing_final += 1
-                if '[1 0 1 1 0 0 0 1 0]' in set(x_strs):
-                    total_found_final += 1
-                if '[1 0 1 1 0 0 0 1 0]' in c_f_dataset:
-                    stop = 1
 
             for x_str in set(x_strs):
                 if x_str in c_f_possible:
@@ -310,8 +256,6 @@ def train(vocab, configs, device, data_loader, inst_to_one_hot, train_test_data,
         print('{}: Number of valid goals found in dataset: {}'.format(set_name, np.mean(nb_cf_dataset)))
         print('{}: Coverage of all valid goals: {}'.format(set_name, np.mean(coverage_possible)))
         print('{}: Coverage of all valid goals from dataset: {}'.format(set_name, np.mean(coverage_dataset)))
-        print('{}: Number of pairs with missing final: {}'.format(set_name, total_missing_final))
-        print('{}: Ratio of found missing final: {}'.format(set_name, total_found_final / total_missing_final))
         results[i_gen, 0] = count
         results[i_gen, 1] = 1 - np.mean(false_preds)
         results[i_gen, 2] = np.mean(valid_goals)
@@ -352,29 +296,6 @@ if __name__ == '__main__':
     vocab, configs, device, data_loader, inst_to_one_hot, train_test_data, set_inds, sentences, \
     all_possible_configs, str_to_index = main(args)
 
-    for VAE_ID in range(10):
-        train(vocab, configs, device, data_loader,
-              inst_to_one_hot, train_test_data, set_inds, sentences,
-              layers, embedding_size, latent_size, learning_rate,  k_param, all_possible_configs, str_to_index, args, VAE_ID)
-
-    #
-    # import time
-    # results = np.zeros([6, 5, 5, 8])
-    # total = 6 * 5
-    # counter = 0
-    # path = '/home/flowers/Desktop/Scratch/sac_curriculum/language/data/'
-    # t_i = time.time()
-    # # for i, layers in enumerate([[128, 128], [256, 256]]):
-    #     # for j, latent_size in enumerate([18, 27]):
-    # for k, k_param in enumerate([0.5, 0.6, 0.7, 0.8, 0.9, 1]):
-    #     for s in range(5):
-    #         print('\n', layers, latent_size, k_param)
-    #         results[k, s, :, :] = train(vocab, configs, device, data_loader,
-    #                                           inst_to_one_hot, train_test_data, set_inds, sentences,
-    #                                           layers, embedding_size, latent_size, learning_rate,  k_param, all_possible_configs, str_to_index, args, 0)
-    #         with open(path + 'results_k_study.pk', 'wb') as f:
-    #             pickle.dump(results, f)
-    #         counter += 1
-    #         print(counter / total * 100 , '%. Remaining time:', (time.time() - t_i) / counter / 60 * (total - counter))
-
-
+    train(vocab, configs, device, data_loader,
+          inst_to_one_hot, train_test_data, set_inds, sentences,
+          layers, embedding_size, latent_size, learning_rate,  k_param, all_possible_configs, str_to_index, args, 0)

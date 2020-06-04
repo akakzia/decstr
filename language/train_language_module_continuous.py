@@ -55,16 +55,8 @@ def main(args):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    ts = time.time()
-
-    np.random.seed(943930)
     configs, sentences, states, all_possible_configs, all_possible_sentences = get_dataset(binary=False)
 
-    # fake_states = np.concatenate([states[:, 0, :], states[:, 1, :]], axis=0)
-    # s_max = fake_states.max(axis=0)
-    # s_min = fake_states.min(axis=0)
-    #
-    # states = (states - s_min) / (s_max - s_min)
     s_min = s_max = None
     set_sentences = set(sentences)
     split_instructions, max_seq_length, word_set = analyze_inst(set_sentences)
@@ -87,7 +79,6 @@ def main(args):
     remove3 = ['Put green on_top_of red', 'Put blue far_from red']
     remove3_str = remove3.copy()
 
-    # what about removing all of one final state, or combinations of sentence and final state, or init and final ?
 
     set_inds = [[] for _ in range(5)]
     for i, s in enumerate(all_str):
@@ -184,9 +175,6 @@ def train(vocab, configs, states, device, data_loader, inst_to_one_hot, train_te
         KL = torch.mean(KL)
 
         cost = - log_p + k_param * KL
-        # cost = - ELBO
-        # BCE = torch.nn.functional.binary_cross_entropy(recon_x, x, reduction='sum')
-        # KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp(), dim=1)
         return cost
 
     def atanh(x):
@@ -208,7 +196,6 @@ def train(vocab, configs, states, device, data_loader, inst_to_one_hot, train_te
     def loss_fn_cont(recon_x, x, mean, log_var):
         MSE = torch.nn.functional.mse_loss(recon_x, x, reduction='sum')
         KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
-        # print(MSE, KLD)
         return (MSE + k_param * KLD) / x.size(0)
 
     loss_fn = loss_fn_cont
@@ -237,29 +224,6 @@ def train(vocab, configs, states, device, data_loader, inst_to_one_hot, train_te
             optimizer.step()
 
             logs['loss'].append(loss.item())
-
-        if iteration % args.print_every == 0 or iteration == len(data_loader)-1:
-            print("Epoch {:02d}/{:02d} Batch {:04d}/{:d}, Loss {:9.4f}".format(
-                epoch, args.epochs, iteration, len(data_loader)-1, loss.item()))
-            score = 0
-            score_dataset = 0
-            inds = np.arange(len(train_test_data[0]))
-            np.random.shuffle(inds)
-            inds = inds[:1500]
-            t_t_data = [np.array(train_test_data[i])[inds] for i in range(len(train_test_data))]
-            for c_i, s, c_f_dataset, c_f_possible, co_i in zip(*t_t_data):
-                one_hot = np.expand_dims(np.array(inst_to_one_hot[s.lower()]), 0)
-                co_i = np.expand_dims(co_i, 0)
-                co_i, s = torch.Tensor(co_i).to(device), torch.Tensor(one_hot).to(device)
-                x = vae.inference(co_i, s, n=1).detach().numpy().flatten()#.astype(np.int)
-
-                # x = x * (s_max - s_min) + s_min
-                x = get_config(x.reshape([3, 3])).astype(np.int)
-                if str(x) in c_f_possible:
-                    score += 1
-                if str(x) in c_f_dataset:
-                    score_dataset += 1
-            print('Score train set: possible : {}, dataset : {}'.format(score / inds.size, score_dataset / inds.size))
 
         # test train statistics
     factor = 100
@@ -314,7 +278,6 @@ def train(vocab, configs, states, device, data_loader, inst_to_one_hot, train_te
             for x_str in x_strs:
                 if x_str not in c_f_possible:
                     count_false_pred += 1
-                    # print(c_i, s, x_str)
 
             coverage_dataset.append(count_found_dataset / len(c_f_dataset))
             coverage_possible.append(count_found_possible / len(c_f_possible))
@@ -344,7 +307,6 @@ def train(vocab, configs, states, device, data_loader, inst_to_one_hot, train_te
 
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=np.random.randint(1e6))
@@ -370,8 +332,7 @@ if __name__ == '__main__':
     vocab, configs, device, data_loader, inst_to_one_hot, \
     train_test_data, test_data, set_inds, sentences, all_possible_configs, str_to_index , states, s_min, s_max = main(args)
 
-    for VAE_ID in range(10):
 
-        train(vocab, configs, states, device, data_loader, inst_to_one_hot, train_test_data, test_data, set_inds,sentences,
-              layers, embedding_size, latent_size, learning_rate,s_min, s_max,k_param, all_possible_configs, str_to_index, args, VAE_ID)
+    train(vocab, configs, states, device, data_loader, inst_to_one_hot, train_test_data, test_data, set_inds,sentences,
+          layers, embedding_size, latent_size, learning_rate,s_min, s_max,k_param, all_possible_configs, str_to_index, args, 0)
 
