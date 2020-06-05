@@ -29,7 +29,7 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
     def __init__(
             self, model_path, num_blocks, n_substeps, gripper_extra_height, block_gripper,
             target_in_the_air, target_offset, obj_range, target_range, predicate_threshold,
-            initial_qpos, reward_type, predicates,
+            initial_qpos, reward_type, predicates, p_coplanar, p_stack_two, p_grasp,
     ):
         """Initializes a new Fetch environment.
 
@@ -46,6 +46,9 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
             initial_qpos (dict): a dictionary of joint names and values that define the initial configuration
             reward_type: Only 'sparse' rewards are implemented
             predicates: 'above' and 'close'
+            p_coplanar: The probability of initializing all blocks without stacks
+            p_stack_two: The probability of having exactly one stack of two given that there is at least one stack
+            p_grasp: The probability of having a block grasped at initialization
         """
 
         self.target_goal = None
@@ -61,6 +64,9 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
         self.predicates = predicates
         self.num_predicates = len(self.predicates)
         self.reward_type = reward_type
+        self.p_coplanar = p_coplanar
+        self.p_stack_two = p_stack_two
+        self.p_grasp = p_grasp
 
         # self.goal_size = 0
 
@@ -609,12 +615,8 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
 
         self.sim.set_state(self.initial_state)
 
-        p_coplanar = 0.7  # probability of having all the blocks on the table with no stacks
-        p_grasp = 0.5  # probability of having a block grasped at initialization
-
-        if biased_init and np.random.uniform() > p_coplanar:
-            p_stack_two = 0.7  # probability of having a scene with exactly one stack of two cubes given that there is at least one stack
-            if np.random.uniform() > p_stack_two:
+        if biased_init and np.random.uniform() > self.p_coplanar:
+            if np.random.uniform() > self.p_stack_two:
                 stack = list(np.random.choice([i for i in range(self.num_blocks)], 3, replace=False))
                 z_stack = [0.525, 0.475, 0.425]
             else:
@@ -675,7 +677,7 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
                         # safety net to be sure we find positions
                         over = False
                         break
-        if biased_init and np.random.rand() < p_grasp:
+        if biased_init and np.random.rand() < self.p_grasp:
             ids = list(range(self.num_blocks))
             # do not grasp base of stack
             if stack:
