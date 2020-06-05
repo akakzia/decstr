@@ -235,7 +235,6 @@ class SACAgent:
         else:
             raise NotImplementedError
 
-        print(self.alpha)
         return critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs
 
     def save(self, model_path, epoch):
