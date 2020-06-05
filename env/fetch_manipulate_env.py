@@ -146,6 +146,7 @@ class FetchManipulateEnv(robot_env.RobotEnv):
     def _get_configuration(self, positions):
         """
         This functions takes as input the positions of the objects in the scene and outputs the corresponding semantic configuration
+        based on the environment predicates
         """
         close_config = np.array([])
         above_config = np.array([])
