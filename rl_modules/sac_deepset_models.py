@@ -10,7 +10,6 @@ from utils import get_instruction
 LOG_SIG_MAX = 2
 LOG_SIG_MIN = -20
 epsilon = 1e-6
-LATENT = 3
 
 
 # Initialize Policy weights
@@ -31,7 +30,6 @@ class SinglePhiActor(nn.Module):
     def forward(self, inp):
         x = F.relu(self.linear1(inp))
         x = F.relu(self.linear2(x))
-        #x = torch.tanh(self.linear3(x))
 
         return x
 
@@ -96,7 +94,7 @@ class SinglePhiCritic(nn.Module):
 
 
 class RhoCritic(nn.Module):
-    def __init__(self, inp, out, action_space=None):
+    def __init__(self, inp, out):
         super(RhoCritic, self).__init__()
         self.linear1 = nn.Linear(inp, 256)
         self.linear3 = nn.Linear(256, out)
@@ -177,8 +175,7 @@ class DeepSetSAC:
         self.pi_tensor = None
         self.log_prob = None
 
-        # Define dimensions according to parameters use_attention
-        # if attention not used, then concatenate [g, ag] in input ==> dimension = 2 * dim_goal
+        # Define dimensions
         if self.language:
             dim_input_goals = 100
         else:
@@ -202,7 +199,6 @@ class DeepSetSAC:
 
         dim_rho_critic_input = dim_phi_critic_output
         dim_rho_critic_output = 1
-
 
         self.single_phi_actor = SinglePhiActor(dim_phi_actor_input, 256, dim_phi_actor_output)
         self.rho_actor = RhoActor(dim_rho_actor_input, dim_rho_actor_output)
@@ -234,10 +230,8 @@ class DeepSetSAC:
                 for j in range(self.num_blocks):
                     if i < j:
                         all_inputs.append(torch.cat([ag[:, self.first_inds], obs_body, self.g[:, self.first_inds], obs_objects[i], obs_objects[j]], dim=1))
-                        # print('First', i, j)
                     elif j < i:
                         all_inputs.append(torch.cat([ag[:, self.second_inds], obs_body, self.g[:, self.second_inds], obs_objects[i], obs_objects[j]], dim=1))
-                        # print('Second', i, j)
 
             input_actor = torch.stack(all_inputs)
 
@@ -250,13 +244,12 @@ class DeepSetSAC:
 
             # Parallelization by stacking input tensors
 
-
             if not self.include_ag:
                 input_actor = torch.stack([torch.cat([body_input_actor, x[0], x[1]], dim=1) for x in permutations(obj_input_actor, 2)])
             else:
                 input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in permutations(obj_input_actor, 2)])
-            #input_actor = torch.stack([torch.cat([ag, body_input_actor, x[0], x[1]], dim=1) for x in combinations(obj_input_actor, 2)])
-        self.save_values = self.single_phi_actor(input_actor).numpy()[:,0,:]
+
+        self.save_values = self.single_phi_actor(input_actor).numpy()[:, 0, :]
         output_phi_actor = self.single_phi_actor(input_actor).sum(dim=0)
         # self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
         if not no_noise:
@@ -285,10 +278,8 @@ class DeepSetSAC:
                 for j in range(self.num_blocks):
                     if i < j:
                         all_inputs.append(torch.cat([ag[:, self.first_inds], obs_body, self.g[:, self.first_inds], obs_objects[i], obs_objects[j]], dim=1))
-                        # print('First', i, j)
                     elif j < i:
                         all_inputs.append(torch.cat([ag[:, self.second_inds], obs_body, self.g[:, self.second_inds], obs_objects[i], obs_objects[j]], dim=1))
-                        # print('Second', i, j)
 
             input_actor = torch.stack(all_inputs)
 
@@ -306,7 +297,6 @@ class DeepSetSAC:
                 input_actor = torch.stack([torch.cat([ag, body_input, x[0], x[1]], dim=1) for x in permutations(obj_input, 2)])            #input_actor = torch.stack([torch.cat([ag, body_input, x[0], x[1]], dim=1) for x in combinations(obj_input, 2)])
 
         output_phi_actor = self.single_phi_actor(input_actor).sum(dim=0)
-        # self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
         if not eval:
             self.pi_tensor, self.log_prob, _ = self.rho_actor.sample(output_phi_actor)
         else:
