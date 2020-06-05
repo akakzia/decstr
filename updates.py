@@ -24,9 +24,11 @@ def update_entropy(alpha, log_alpha, target_entropy, log_pi, alpha_optim, args):
 
 def update_flat(actor_network, critic_network, critic_target_network, policy_optim, critic_optim, alpha, log_alpha, target_entropy,
                 alpha_optim, obs_norm, g_norm, obs_next_norm, actions, rewards, args):
+    # Concatenate inputs
     inputs_norm = np.concatenate([obs_norm, g_norm], axis=1)
     inputs_next_norm = np.concatenate([obs_next_norm, g_norm], axis=1)
 
+    # Tensorize
     inputs_norm_tensor = torch.tensor(inputs_norm, dtype=torch.float32)
     inputs_next_norm_tensor = torch.tensor(inputs_next_norm, dtype=torch.float32)
     actions_tensor = torch.tensor(actions, dtype=torch.float32)
@@ -39,15 +41,10 @@ def update_flat(actor_network, critic_network, critic_target_network, policy_opt
         r_tensor = r_tensor.cuda()
 
     with torch.no_grad():
-        # do the normalization
-        # concatenate the stuffs
         actions_next, log_pi_next, _ = actor_network.sample(inputs_next_norm_tensor)
         qf1_next_target, qf2_next_target = critic_target_network(inputs_next_norm_tensor, actions_next)
         min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - alpha * log_pi_next
         next_q_value = r_tensor + args.gamma * min_qf_next_target
-        # clip the q value
-        # clip_return = 1 / (1 - args.gamma)
-        # next_q_value = torch.clamp(next_q_value, -clip_return, 3)
 
     # the q loss
     qf1, qf2 = critic_network(inputs_norm_tensor, actions_tensor)
@@ -84,7 +81,7 @@ def update_flat(actor_network, critic_network, critic_target_network, policy_opt
 
 def update_deepsets(model, language, policy_optim, critic_optim, alpha, log_alpha, target_entropy, alpha_optim, obs_norm, ag_norm, g_norm,
                     obs_next_norm, ag_next_norm, actions, rewards, args):
-
+    # Tensorize
     obs_norm_tensor = torch.tensor(obs_norm, dtype=torch.float32)
     obs_next_norm_tensor = torch.tensor(obs_next_norm, dtype=torch.float32)
     if language:
