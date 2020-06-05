@@ -9,7 +9,6 @@ from rl_modules.sac_deepset_models import DeepSetSAC
 from updates import update_flat, update_deepsets
 
 
-
 """
 SAC with HER (MPI-version)
 """
@@ -76,6 +75,9 @@ class SACAgent:
             self.critic_target_network.cuda()
 
         # Target Entropy
+        self.log_alpha = torch.log(torch.tensor(self.alpha))
+        self.target_entropy = None
+        self.alpha_optim = None
         if self.args.automatic_entropy_tuning:
             self.target_entropy = -torch.prod(torch.Tensor(self.env_params['action'])).item()
             self.log_alpha = torch.zeros(1, requires_grad=True)
@@ -100,8 +102,6 @@ class SACAgent:
                                   goal_sampler=self.goal_sampler
                                   )
 
-
-
     def act(self, obs, ag, g, no_noise):
         with torch.no_grad():
             # normalize policy inputs 
@@ -118,7 +118,7 @@ class SACAgent:
                 action = self.model.pi_tensor.numpy()[0]
 
             else:
-                input_tensor = self._preproc_inputs(obs, g)  # PROCESSING TO CHECK
+                input_tensor = self._preproc_inputs(obs, g)
                 action = self._select_actions(input_tensor, no_noise=no_noise)
                 
         return action.copy()
@@ -140,7 +140,7 @@ class SACAgent:
 
     def train(self):
         # train the network
-        critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = self._update_network()
+        self._update_network()
 
         # soft update
         if self.architecture == 'deepsets':
@@ -158,7 +158,6 @@ class SACAgent:
 
     # update the normalizer
     def _update_normalizer(self, episode):
-
         mb_obs = episode['obs']
         mb_ag = episode['ag']
         mb_g = episode['g']
@@ -224,20 +223,20 @@ class SACAgent:
         g_next_norm = self.g_norm.normalize(transitions['g_next'])
 
         if self.architecture == 'flat':
-            critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs = update_flat(self.actor_network, self.critic_network, self.critic_target_network,
-                                                                           self.policy_optim, self.critic_optim, self.alpha, self.log_alpha,
-                                                                           self.target_entropy, self.alpha_optim, obs_norm, g_norm, obs_next_norm,
-                                                                           actions, rewards, self.args)
+            critic_1_loss, critic_2_loss, actor_loss, self.alpha, alpha_loss, alpha_tlogs = update_flat(self.actor_network, self.critic_network,
+                                                                           self.critic_target_network, self.policy_optim, self.critic_optim,
+                                                                           self.alpha, self.log_alpha, self.target_entropy, self.alpha_optim,
+                                                                           obs_norm, g_norm, obs_next_norm, actions, rewards, self.args)
         elif self.architecture == 'deepsets':
-            critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs = update_deepsets(self.model, self.language, self.policy_optim, self.critic_optim,
-                                                                               self.alpha, self.log_alpha, self.target_entropy,
-                                                                               self.alpha_optim, obs_norm, ag_norm, g_norm, obs_next_norm,
-                                                                               ag_next_norm, actions, rewards, self.args)
+            critic_1_loss, critic_2_loss, actor_loss, self.alpha, alpha_loss, alpha_tlogs = update_deepsets(self.model, self.language,
+                                                                               self.policy_optim, self.critic_optim, self.alpha, self.log_alpha,
+                                                                               self.target_entropy, self.alpha_optim, obs_norm, ag_norm, g_norm,
+                                                                               obs_next_norm, ag_next_norm, actions, rewards, self.args)
         else:
             raise NotImplementedError
 
+        print(self.alpha)
         return critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs
-
 
     def save(self, model_path, epoch):
         # Store model
@@ -252,7 +251,6 @@ class SACAgent:
                        model_path + '/model_{}.pt'.format(epoch))
         else:
             raise NotImplementedError
-
 
     def load(self, model_path, args):
 

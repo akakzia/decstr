@@ -90,5 +90,5 @@ class MultiBuffer:
             idx = np.random.randint(0, self.size, inc)
         self.current_size = min(self.size, self.current_size + inc)
         if inc == 1:
-            idx = idx[0]
+            idx = [idx[0]]
         return idx
