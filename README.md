@@ -1,15 +1,9 @@
-# DECSTR: Learning Goal-Directed Abstract Behaviors using Pre-Verbal Spatial Predicates in Intrinsically Motivated Agents
+# Grounding Language to Autonomously-Acquired Skills via Goal Generation
 
-This repository contains the code associated to the *DECSTR: Learning Goal-Directed Abstract Behaviors using Pre-Verbal Spatial Predicates in Intrinsically Motivated Agents* paper.
+This repository contains the code associated to the *Grounding Language to Autonomously-Acquired Skills via Goal Generation* paper submitted at the ICLR 2021 conference.
 
 **Abstract**
-Intrinsically motivated learning agents freely explore their environment and set their own goals. These goals are traditionally represented as specific configurations of the 
-sensory inputs of the agent, but recent works introduced the use of language to represent more abstract goals. Language can, for example, represent goals as sets of general 
-properties that surrounding objects should verify. However, language-conditioned agents are trained simultaneously to understand language and to act, which seems to contrast 
-with how children learn: developmental psychology showed that infants demonstrate goal-oriented behaviors and abstract spatial concepts very early in their development, before 
-language mastery. Guided by these findings, we introduce a high-level state representation based on natural semantic predicates that characterize spatial relations between 
-objects and are known to be present early in infants. In a robotic manipulation environment, our DECSTR system explores this representation space by manipulating objects and 
-efficiently learns to achieve any reachable goal configuration within it. It does so by leveraging an object-centered modular architecture, a symmetry inductive bias, and a new form of automatic curriculum learning for goal selection and policy learning. As with children, language acquisition takes place in a second phase, independently from goal-oriented sensorimotor learning. This is done via a new goal generation module, conditioned on instructions about transformations of object relations. We present ablations studies for each component and highlight several advantages of targeting abstract goals over specific ones. We further show that using this intermediate representation enables efficient language grounding by evaluating agents on sequences of language instructions and their logical combinations.
+We are interested in the autonomous acquisition of repertoires of skills. Language-conditioned reinforcement learning (LC-RL) approaches are great tools in this quest, as they allow to express abstract goals as sets of constraints on the states. However, most LC-RL agents are not autonomous and cannot learn without external instructions and feedback. Besides, their direct language condition cannot account for the goal-directed behavior of pre-verbal infants and strongly limits the expression of behavioral diversity for a given language input. To resolve these issues, we propose a new conceptual approach to language-conditioned RL: the Language-Goal-Behavior architecture (LGB). LGB decouples skill learning and language grounding via an intermediate semantic representation of the world. To showcase the properties of LGB, we present a specific implementation called DECSTR. DECSTR is an intrinsically motivated learning agent endowed with an innate semantic representation describing spatial relations between physical objects. In a first stage (G -> B), it freely explores its environment and targets self-generated semantic configurations. In a second stage (L -> G), it trains a language-conditioned  goal generator to generate semantic goals that match the constraints expressed in language-based inputs. We showcase the additional properties of LGB w.r.t. both an end-to-end LC-RL approach and a similar approach leveraging non-semantic, continuous intermediate representations. Intermediate semantic representations help satisfy language commands in a diversity of ways, enable strategy switching after a failure and facilitate language grounding.
 
 **Link to Website**
 
@@ -69,8 +63,3 @@ The language-conditioned goal generation module can be trained with:
 ```python train_language_module_binary.py ```
 
 The corresponding scripts can be found in the language folder. Once it is trained, you can test a trained agent with language instructions. See scripts demo_sentence_*
-
-
-
-**TODO**
-Add descriptions to run demos with language.
