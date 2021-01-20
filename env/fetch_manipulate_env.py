@@ -70,6 +70,8 @@ class FetchManipulateEnv(robot_env.RobotEnv):
 
         self.object_names = ['object{}'.format(i) for i in range(self.num_blocks)]
 
+        self.object_inds = [list(range(10 + i * 15, 10 + (i + 1) * 15)) for i in range(self.num_blocks)]
+
         self.location_record = None
         self.location_record_write_dir = None
         self.location_record_prefix = None
@@ -226,8 +228,6 @@ class FetchManipulateEnv(robot_env.RobotEnv):
         achieved_goal = self._get_configuration(objects_positions)
 
         achieved_goal = np.squeeze(achieved_goal)
-
-        obs = np.concatenate([obs, achieved_goal])
 
         return {
             'observation': obs.copy(),

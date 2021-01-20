@@ -1,11 +1,12 @@
 import threading
 import numpy as np
+from language.build_dataset import sentence_from_configuration
+from utils import language_to_id
 
 """
 the replay buffer here is basically from the openai baselines code
 
 """
-
 
 
 class MultiBuffer:
@@ -26,7 +27,10 @@ class MultiBuffer:
                        'ag': np.empty([self.size, self.T + 1, self.env_params['goal']]),
                        'g': np.empty([self.size, self.T, self.env_params['goal']]),
                        'actions': np.empty([self.size, self.T, self.env_params['action']]),
+                       'lg_ids': np.empty([self.size, self.T]).astype(np.int),
+                       # 'language_goal': [None for _ in range(self.size)],
                        }
+
         self.goal_ids = np.zeros([self.size])  # contains id of achieved goal (discovery rank)
         self.goal_ids.fill(np.nan)
 
@@ -46,6 +50,9 @@ class MultiBuffer:
                 self.buffer['g'][idxs[i]] = e['g']
                 self.buffer['actions'][idxs[i]] = e['act']
                 self.goal_ids[idxs[i]] = e['last_ag_oracle_id']
+                if 'language_goal' in e.keys():
+                    # self.buffer['language_goal'][idxs[i]] = e['language_goal']
+                    self.buffer['lg_ids'][idxs[i]] = e['lg_ids']
 
     # sample the data from the replay buffer
     def sample(self, batch_size):
@@ -53,7 +60,12 @@ class MultiBuffer:
         with self.lock:
             if not self.multi_head:
                 for key in self.buffer.keys():
-                    temp_buffers[key] = self.buffer[key]
+                    temp_buffers[key] = self.buffer[key][:self.current_size]
+                    # if key == 'language_goal':
+                    #     temp_buffers[key] = np.array([np.array(self.buffer[key][:self.current_size]) for _ in range(self.T)]).T
+                    #     temp_buffers[key] = temp_buffers[key].astype('object')
+                    # else:
+                    #     temp_buffers[key] = self.buffer[key][:self.current_size]
             else:
                 # Compute goal id proportions with respect to LP probas
                 goal_ids = self.goal_sampler.build_batch(batch_size)
@@ -72,6 +84,7 @@ class MultiBuffer:
                     temp_buffers[key] = self.buffer[key][buffer_ids]
         temp_buffers['obs_next'] = temp_buffers['obs'][:, 1:, :]
         temp_buffers['ag_next'] = temp_buffers['ag'][:, 1:, :]
+
 
         # sample transitions
         transitions = self.sample_func(temp_buffers, batch_size)

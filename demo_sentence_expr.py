@@ -1,5 +1,5 @@
 import torch
-from rl_modules.sac_agent import SACAgent
+from rl_modules.rl_agent import RLAgent
 from arguments import get_args
 import env
 import gym
@@ -189,7 +189,7 @@ if __name__ == '__main__':
     model_path = path + 'policy_model.pt'
     # create the sac agent to interact with the environment
     if args.agent == "SAC":
-        policy = SACAgent(args, env.compute_reward, goal_sampler)
+        policy = RLAgent(args, env.compute_reward, goal_sampler)
         policy.load(model_path, args)
     else:
         raise NotImplementedError

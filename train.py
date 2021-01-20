@@ -4,15 +4,16 @@ import env
 import gym
 import os
 from arguments import get_args
-from rl_modules.sac_agent import SACAgent
+from rl_modules.rl_agent import RLAgent
 import random
 import torch
 from rollout import RolloutWorker
+from temporary_lg_goal_sampler import LanguageGoalSampler
 from goal_sampler import GoalSampler
-from utils import init_storage
+from utils import init_storage, get_instruction
 import time
 from mpi_utils import logger
-
+from language.build_dataset import sentence_from_configuration
 
 def get_env_params(env):
     obs = env.reset()
@@ -30,6 +31,11 @@ def launch(args):
     t_total_init = time.time()
 
     # Make the environment
+    if args.algo == 'continuous':
+        args.env_name = 'FetchManipulate3ObjectsContinuous-v0'
+        args.multi_criteria_her = True
+    else:
+        args.env_name = 'FetchManipulate3Objects-v0'
     env = gym.make(args.env_name)
 
     # set random seeds for reproducibility
@@ -44,17 +50,21 @@ def launch(args):
     if rank == 0:
         logdir, model_path, bucket_path = init_storage(args)
         logger.configure(dir=logdir)
+        logger.info(vars(args))
 
     args.env_params = get_env_params(env)
 
-    logger.info(vars(args))
 
-    # Initialize Goal Sampler:
-    goal_sampler = GoalSampler(args)
+    if args.algo == 'language':
+        language_goal = get_instruction()
+        goal_sampler = LanguageGoalSampler(args)
+    else:
+        language_goal = None
+        goal_sampler = GoalSampler(args)
 
     # Initialize RL Agent
     if args.agent == "SAC":
-        policy = SACAgent(args, env.compute_reward, goal_sampler)
+        policy = RLAgent(args, env.compute_reward, goal_sampler)
     else:
         raise NotImplementedError
 
@@ -86,6 +96,10 @@ def launch(args):
             # Sample goals
             t_i = time.time()
             goals, self_eval = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False)
+            if args.algo == 'language':
+                language_goal_ep = np.random.choice(language_goal, size=args.num_rollouts_per_mpi)
+            else:
+                language_goal_ep = None
             time_dict['goal_sampler'] += time.time() - t_i
 
             # Control biased initializations
@@ -99,7 +113,8 @@ def launch(args):
             episodes = rollout_worker.generate_rollout(goals=goals,  # list of goal configurations
                                                        self_eval=self_eval,  # whether the agent performs self-evaluations
                                                        true_eval=False,  # these are not offline evaluation episodes
-                                                       biased_init=biased_init)  # whether initializations should be biased.
+                                                       biased_init=biased_init,
+                                                       language_goal=language_goal_ep)  # whether initializations should be biased.
             time_dict['rollout'] += time.time() - t_i
 
             # Goal Sampler updates
@@ -139,23 +154,36 @@ def launch(args):
             if rank==0: logger.info('\tRunning eval ..')
             # Performing evaluations
             t_i = time.time()
-            eval_goals = goal_sampler.valid_goals
+            if args.algo == 'language':
+                ids = np.random.choice(np.arange(35), size=len(language_goal))
+                eval_goals = goal_sampler.valid_goals[ids]
+            else:
+                eval_goals = goal_sampler.valid_goals
             episodes = rollout_worker.generate_rollout(goals=eval_goals,
                                                        self_eval=True,  # this parameter is overridden by true_eval
                                                        true_eval=True,  # this is offline evaluations
-                                                       biased_init=False)
+                                                       biased_init=False,
+                                                       language_goal=language_goal)
 
             # Extract the results
-            results = np.array([str(e['g'][0]) == str(e['ag'][-1]) for e in episodes]).astype(np.int)
+            if args.algo == 'continuous':
+                results = np.array([e['rewards'][-1] == 3. for e in episodes]).astype(np.int)
+            elif args.algo == 'language':
+                results = np.array([e['language_goal'] in sentence_from_configuration(config=e['ag'][-1], all=True) for e in episodes]).astype(np.int)
+            else:
+                results = np.array([str(e['g'][0]) == str(e['ag'][-1]) for e in episodes]).astype(np.int)
+            rewards = np.array([e['rewards'][-1] for e in episodes])
             all_results = MPI.COMM_WORLD.gather(results, root=0)
+            all_rewards = MPI.COMM_WORLD.gather(rewards, root=0)
             time_dict['eval'] += time.time() - t_i
 
             # Logs
             if rank == 0:
                 assert len(all_results) == args.num_workers  # MPI test
                 av_res = np.array(all_results).mean(axis=0)
+                av_rewards = np.array(all_rewards).mean(axis=0)
                 global_sr = np.mean(av_res)
-                log_and_save(goal_sampler, epoch, episode_count, av_res, global_sr, time_dict)
+                log_and_save(goal_sampler, epoch, episode_count, av_res, av_rewards, global_sr, time_dict)
 
                 # Saving policy models
                 if epoch % args.save_freq == 0:
@@ -164,8 +192,8 @@ def launch(args):
                 if rank==0: logger.info('\tEpoch #{}: SR: {}'.format(epoch, global_sr))
 
 
-def log_and_save( goal_sampler, epoch, episode_count, av_res, global_sr, time_dict):
-    goal_sampler.save(epoch, episode_count, av_res, global_sr, time_dict)
+def log_and_save( goal_sampler, epoch, episode_count, av_res, av_rew, global_sr, time_dict):
+    goal_sampler.save(epoch, episode_count, av_res, av_rew, global_sr, time_dict)
     for k, l in goal_sampler.stats.items():
         logger.record_tabular(k, l[-1])
     logger.dump_tabular()

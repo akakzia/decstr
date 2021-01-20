@@ -6,12 +6,9 @@ from env import rotations, robot_env, utils
 from utils import generate_goals
 
 
-def objects_distance(x, y):
-    """
-    A function that returns the euclidean distance between two objects x and y
-    """
-    assert x.shape == y.shape
-    return np.linalg.norm(x - y)
+def goal_distance(goal_a, goal_b):
+    assert goal_a.shape == goal_b.shape
+    return np.linalg.norm(goal_a - goal_b, axis=-1)
 
 
 def above(x, y):
@@ -29,10 +26,10 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
     def __init__(
             self, model_path, num_blocks, n_substeps, gripper_extra_height, block_gripper,
             target_in_the_air, target_offset, obj_range, target_range, predicate_threshold,
-            initial_qpos, reward_type, predicates, p_coplanar, p_stack_two, p_grasp,
+            distance_threshold, initial_qpos, reward_type, predicates, p_coplanar, p_stack_two,
+            p_grasp, goals_on_stack_probability=1.0, allow_blocks_on_stack=True, all_goals_always_on_stack=False
     ):
         """Initializes a new Fetch environment.
-
         Args:
             model_path (string): path to the environments XML file
             num_blocks: number of block objects in environments XML file
@@ -43,8 +40,9 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
             target_offset (float or array with 3 elements): offset of the target
             obj_range (float): range of a uniform distribution for sampling initial object positions
             target_range (float): range of a uniform distribution for sampling a target
+            distance_threshold (float): the threshold after which a goal is considered achieved
             initial_qpos (dict): a dictionary of joint names and values that define the initial configuration
-            reward_type: Only 'sparse' rewards are implemented
+            reward_type: Incremental Rewards are used by default
             predicates: 'above' and 'close'
             p_coplanar: The probability of initializing all blocks without stacks
             p_stack_two: The probability of having exactly one stack of two given that there is at least one stack
@@ -60,6 +58,7 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
         self.target_offset = target_offset
         self.obj_range = obj_range
         self.target_range = target_range
+        self.distance_threshold = distance_threshold
         self.predicate_threshold = predicate_threshold
         self.predicates = predicates
         self.num_predicates = len(self.predicates)
@@ -67,6 +66,10 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
         self.p_coplanar = p_coplanar
         self.p_stack_two = p_stack_two
         self.p_grasp = p_grasp
+
+        self.goals_on_stack_probability = goals_on_stack_probability
+        self.allow_blocks_on_stack = allow_blocks_on_stack
+        self.all_goals_always_on_stack = all_goals_always_on_stack
 
         # self.goal_size = 0
 
@@ -79,6 +82,8 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
         self.location_record_steps_recorded = 0
         self.location_record_max_steps = 2000
 
+        self.object_inds = [list(range(10 + i * 15, 10 + (i + 1) * 15)) for i in range(self.num_blocks)]
+
         buckets = generate_goals()
         valid_goals = []
         for k in buckets.keys():
@@ -86,9 +91,6 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
         self.valid_goals = np.array(valid_goals)
         self.valid_str = [str(vg) for vg in self.valid_goals]
 
-        # temporary values
-        self.min_max_x = (1.19, 1.49)
-        self.min_max_y = (0.59, 0.89)
         super(FetchManipulateEnvContinuous, self).__init__(
             model_path=model_path, n_substeps=n_substeps, n_actions=4,
             initial_qpos=initial_qpos)
@@ -112,8 +114,8 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
 
     def flush_location_record(self, create_new_empty_record=True):
         if self.location_record is not None and self.location_record_steps_recorded > 0:
-            write_file = os.path.join(self.location_record_write_dir, "{}_{}".format(self.location_record_prefix,
-                                                                                     self.location_record_file_number))
+            write_file = os.path.join(self.location_record_write_dir,"{}_{}".format(self.location_record_prefix,
+                                                                           self.location_record_file_number))
             np.save(write_file, self.location_record[:self.location_record_steps_recorded])
             self.location_record_file_number += 1
             self.location_record_steps_recorded = 0
@@ -132,10 +134,45 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
     # GoalEnv methods
     # ----------------------------
 
+    def sub_goal_distances(self, goal_a, goal_b):
+        assert goal_a.shape == goal_b.shape
+        for i in range(self.num_blocks - 1):
+            assert goal_a[..., i * 3:(i + 1) * 3].shape == goal_a[..., (i+1) * 3:(i + 2) * 3].shape
+
+        return [
+            np.linalg.norm(goal_a[..., i*3:(i+1)*3] - goal_b[..., i*3:(i+1)*3], axis=-1) for i in range(self.num_blocks)
+        ]
+
+    def gripper_pos_far_from_goals(self, achieved_goal, goal):
+        gripper_pos = achieved_goal[..., -3:]
+        sub_goals = goal[..., :-3]
+
+        distances = [
+            np.linalg.norm(gripper_pos - sub_goals[..., i*3:(i+1)*3], axis=-1) for i in range(self.num_blocks)
+        ]
+
+        return np.all([d > self.distance_threshold*2 for d in distances], axis=0)
+
     def compute_reward(self, achieved_goal, goal, info):
-        assert self.reward_type == 'sparse', "only sparse reward type is implemented."
-        reward = (achieved_goal == goal).all().astype(np.float32)
-        return reward
+        # Compute distance between goal and the achieved goal.
+        # print(self.reward_type)
+        distances = self.sub_goal_distances(achieved_goal, goal)
+        if self.reward_type == 'incremental':
+            # Using incremental reward for each block in correct position
+            reward = np.sum([(d < self.distance_threshold).astype(np.float32) for d in distances], axis=0)
+            reward = np.asarray(reward)
+            # np.putmask(reward, reward == 0, self.gripper_pos_far_from_goals(achieved_goal, goal))
+            return reward
+        elif self.reward_type == 'sparse':
+            reward = np.min([-(d > self.distance_threshold).astype(np.float32) for d in distances], axis=0)
+            reward = np.asarray(reward)
+            np.putmask(reward, reward == 0, self.gripper_pos_far_from_goals(achieved_goal, goal))
+            return reward
+        elif self.reward_type == 'dense':
+            d = goal_distance(achieved_goal, goal)
+            if min([-(d > self.distance_threshold).astype(np.float32) for d in distances]) == 0:
+                return 0
+            return -d
 
     # RobotEnv methods
     # ----------------------------
@@ -173,7 +210,7 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
         above_config = np.array([])
         if "close" in self.predicates:
             object_combinations = itertools.combinations(positions, 2)
-            object_rel_distances = np.array([objects_distance(obj[0], obj[1]) for obj in object_combinations])
+            object_rel_distances = np.array([goal_distance(obj[0], obj[1]) for obj in object_combinations])
 
             close_config = np.array([(distance <= self.predicate_threshold).astype(np.float32)
                                      for distance in object_rel_distances])
@@ -205,7 +242,7 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
             gripper_vel,
         ])
 
-        objects_positions = []
+        achieved_goal = []
 
         for i in range(self.num_blocks):
             object_i_pos = self.sim.data.get_site_xpos(self.object_names[i])
@@ -227,18 +264,27 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
                 object_i_velr.ravel()
             ])
 
-            objects_positions = np.concatenate([objects_positions, object_i_pos.ravel()])
+            achieved_goal = np.concatenate([
+                achieved_goal, object_i_pos.copy()
+            ])
 
-        objects_positions = objects_positions.reshape(self.num_blocks, 3)
-        self.objects_positions = objects_positions.copy()
+        achieved_goal_binary = self._get_configuration(achieved_goal.reshape(self.num_blocks, 3))
 
-        achieved_goal_binary = self._get_configuration(objects_positions).flatten()
+        achieved_goal = np.squeeze(achieved_goal)
 
-        return {'observation': obs.copy(),
-                'achieved_goal': objects_positions.flatten().copy(),
-                'desired_goal': self.target_goal.copy(),
-                'achieved_goal_binary': achieved_goal_binary.copy(),
-                'desired_goal_binary': self.binary_goal.copy()}
+        if self.binary_goal is None:
+            self.binary_goal = np.zeros(9)
+
+        if self.target_goal is None:
+            self.target_goal = self._sample_goal()
+
+        return {
+            'observation': obs.copy(),
+            'achieved_goal': achieved_goal.copy(),
+            'desired_goal': self.target_goal.copy(),
+            'achieved_goal_binary': achieved_goal_binary.copy(),
+            'desired_goal_binary': self.binary_goal.copy(),
+        }
 
     def _viewer_setup(self):
         body_id = self.sim.model.body_name2id('robot0:gripper_link')
@@ -252,49 +298,103 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
     def _render_callback(self):
         # Visualize target.
         sites_offset = (self.sim.data.site_xpos - self.sim.model.site_pos).copy()
-        for obj in range(self.num_blocks):
-            site_id = self.sim.model.site_name2id('target{}'.format(obj))
-            pos = self.target_goal[obj * 3: (obj + 1) * 3].copy() - sites_offset[0]
-            pos[2] += 0.05
-            self.sim.model.site_pos[site_id] = pos.copy()
+        # print("sites offset: {}".format(sites_offset[0]))
+        for i in range(self.num_blocks):
+
+            site_id = self.sim.model.site_name2id('target{}'.format(i))
+            self.sim.model.site_pos[site_id] = self.target_goal[i*3:(i+1)*3] - sites_offset[i]
+
         self.sim.forward()
 
-    def reset(self):
-        # Usual reset overriden by reset_goal, that specifies a goal
-        return self.reset_goal(np.zeros([9]), False)
+    def reset(self, goal=None, init=None, biased_init=False):
+        self.binary_goal = goal
 
-    def _generate_valid_goal(self):
-        raise NotImplementedError
+        # self.target_goal, goals, number_of_goals_along_stack = self._sample_goal(return_extra_info=True)
+        self.target_goal = self.sample_continuous_goal_from_binary_goal(goal)
 
-    def _sample_goal(self):
-        # self.target_goal = self._generate_valid_goal()
-        self.binary_goal = np.random.randint(2, size=9).astype(np.float32)
-        self.target_goal = self.sample_continuous_goal_from_binary_goal(self.binary_goal.copy())
-        return self.target_goal
+        self.sim.set_state(self.initial_state)
 
-    def _is_success(self, achieved_goal, desired_goal):
-        return (achieved_goal == desired_goal).all()
+        # If evaluation mode, generate blocks on the table with no stacks
+        if not biased_init:
+            for i, obj_name in enumerate(self.object_names):
+                object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(obj_name))
+                assert object_qpos.shape == (7,)
+                object_qpos[2] = 0.425
+                object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
+                                                                                     self.obj_range,
+                                                                                     size=2)
+                object_qpos[:2] = object_xpos
 
-    def _env_setup(self, initial_qpos):
-        for name, value in initial_qpos.items():
-            self.sim.data.set_joint_qpos(name, value)
-        utils.reset_mocap_welds(self.sim)
+                self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
+
+            self.sim.forward()
+            obs = self._get_obs()
+
+            return obs
+
+        if np.random.uniform() > self.p_stack_two:
+            stack = list(np.random.choice([i for i in range(self.num_blocks)], 3, replace=False))
+            z_stack = [0.525, 0.475, 0.425]
+        else:
+            stack = list(np.random.choice([i for i in range(self.num_blocks)], 2, replace=False))
+            z_stack = [0.475, 0.425]
+
+        idx_grasp = np.random.choice([i for i in range(self.num_blocks)])
+        if np.random.uniform() < self.p_coplanar:
+            for i, obj_name in enumerate(self.object_names):
+                object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(obj_name))
+                assert object_qpos.shape == (7,)
+                object_qpos[2] = 0.425
+                object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
+                                                                                     self.obj_range,
+                                                                                     size=2)
+                object_qpos[:2] = object_xpos
+
+                self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
+        else:
+            temp_rand = self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            for i, obj_name in enumerate(self.object_names):
+                object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(obj_name))
+                assert object_qpos.shape == (7,)
+                if i in stack:
+                    object_qpos[2] = z_stack[stack.index(i)]
+                    object_xpos = self.initial_gripper_xpos[:2] + temp_rand
+                    object_qpos[:2] = object_xpos
+
+                else:
+                    object_qpos[2] = 0.425
+                    object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
+                                                                                         self.obj_range,
+                                                                                         size=2)
+                    object_qpos[:2] = object_xpos
+
+                    # idx_grasp = i
+
+                self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
+            # if len(stack) == self.num_blocks:
+            #     idx_grasp = stack[0]
+
         self.sim.forward()
+        obs = self._get_obs()
 
-        # Move end effector into position.
-        gripper_target = np.array([-0.498, 0.005, -0.431 + self.gripper_extra_height]) + self.sim.data.get_site_xpos('robot0:grip')
-        gripper_rotation = np.array([1., 0., 1., 0.])
-        self.sim.data.set_mocap_pos('robot0:mocap', gripper_target)
-        self.sim.data.set_mocap_quat('robot0:mocap', gripper_rotation)
+        if biased_init and np.random.rand() < self.p_grasp:
+            ids = list(range(self.num_blocks))
+            # do not grasp base of stack
+            if stack:
+                for s in stack[1:]:
+                    ids.remove(s)
+            idx_grasp = np.random.choice(ids)
+            self._grasp(idx_grasp)
 
-        for _ in range(10):
-            self.sim.step()
+        return obs
 
-            # Extract information for sampling goals.
-        self.initial_gripper_xpos = self.sim.data.get_site_xpos('robot0:grip').copy()
-        self.height_offset = self.sim.data.get_site_xpos('object0')[2]
+    def reset_goal(self, goal=None, init=None, biased_init=False):
+        return self.reset(goal=goal, init=init, biased_init=biased_init)
 
     def sample_continuous_goal_from_binary_goal(self, binary_goal):
+        if binary_goal is None:
+            binary_goal = np.zeros(9)
+
         valid_config = str(binary_goal) in self.valid_str
 
         if valid_config:
@@ -603,92 +703,90 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
         #     self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
         return np.array(positions).flatten()
 
-    def reset_goal(self, goal, biased_init=False):
-        """
-        This function resets the environment and target the goal given as input
-        Args:
-            goal: The semantic configuration to target
-            biased_init: Whether or not to initialize the blocks in non-trivial configuration
-        """
-        self.binary_goal = goal.copy()
-        self.target_goal = self.sample_continuous_goal_from_binary_goal(goal.copy())
+    def _sample_goal(self, return_extra_info=False):
 
-        self.sim.set_state(self.initial_state)
-
-        if biased_init and np.random.uniform() > self.p_coplanar:
-            if np.random.uniform() > self.p_stack_two:
-                stack = list(np.random.choice([i for i in range(self.num_blocks)], 3, replace=False))
-                z_stack = [0.525, 0.475, 0.425]
-            else:
-                stack = list(np.random.choice([i for i in range(self.num_blocks)], 2, replace=False))
-                z_stack = [0.475, 0.425]
-
-            pos_stack = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
-            for i, obj_name in enumerate(self.object_names):
-                object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(obj_name))
-                assert object_qpos.shape == (7,)
-                if i in stack:
-                    object_qpos[2] = z_stack[stack.index(i)]
-                    object_qpos[:2] = pos_stack.copy()
-
-                else:
-                    # place third object at least 0.05 away from other cubes
-                    object_qpos[2] = 0.425
-                    counter = 0
-                    while counter < 100:
-                        counter += 1
-                        object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
-                                                                                             self.obj_range,
-                                                                                             size=2)
-                        if np.linalg.norm(object_xpos - pos_stack) > (np.sqrt(2) * 0.05):
-                            break
-                    object_qpos[:2] = object_xpos.copy()
-                self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
-
+        max_goals_along_stack = self.num_blocks
+        if self.all_goals_always_on_stack:
+            min_goals_along_stack = self.num_blocks
         else:
-            # Reset with all coplanar blocks and make sure to avoid unstable cases (blocks initialized at the same spot)
-            stack = None
-            # place cubes away from each other
-            obj_placed = 0
-            positions = []
-            over = False
-            while not over:
-                over = True
-                counter = 0
-                while obj_placed < len(self.object_names):
-                    counter += 1
-                    object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(self.object_names[obj_placed]))
-                    assert object_qpos.shape == (7,)
-                    object_qpos[2] = 0.425
-                    object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
-                                                                                         self.obj_range,
-                                                                                         size=2)
-                    object_qpos[:2] = object_xpos
-                    to_place = True
-                    for p in positions:
-                        if np.linalg.norm(object_xpos - p) < (np.sqrt(2) * 0.05):
-                            to_place = False
-                            break
-                    if to_place:
-                        self.sim.data.set_joint_qpos('{}:joint'.format(self.object_names[obj_placed]), object_qpos)
-                        positions.append(object_xpos.copy())
-                        obj_placed += 1
-                    if counter > 100:
-                        # safety net to be sure we find positions
-                        over = False
-                        break
-        if biased_init and np.random.rand() < self.p_grasp:
-            ids = list(range(self.num_blocks))
-            # do not grasp base of stack
-            if stack:
-                for s in stack[1:]:
-                    ids.remove(s)
-            idx_grasp = np.random.choice(ids)
-            self._grasp(idx_grasp)
+            min_goals_along_stack = 2
 
+
+        if np.random.uniform() < 1.0 - self.goals_on_stack_probability:
+            max_goals_along_stack = 1
+            min_goals_along_stack = 0
+
+        number_of_goals_along_stack = np.random.randint(min_goals_along_stack, max_goals_along_stack + 1)
+
+        goal0 = None
+        first_goal_is_valid = False
+        while not first_goal_is_valid:
+            goal0 = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+            if self.num_blocks > 4:
+                if np.linalg.norm(goal0[:2] - self.initial_gripper_xpos[:2]) < 0.09:
+                    continue
+            first_goal_is_valid = True
+
+        goal0 += self.target_offset
+        goal0[2] = self.height_offset
+
+        goals = [goal0]
+
+        prev_x_positions = [goal0[:2]]
+        goal_in_air_used = False
+        for i in range(self.num_blocks - 1):
+            if i < number_of_goals_along_stack - 1:
+                goal_i = goal0.copy()
+                goal_i[2] = self.height_offset + (0.05 * (i + 1))
+            else:
+                goal_i_set = False
+                goal_i = None
+                while not goal_i_set or np.any([np.linalg.norm(goal_i[:2] - other_xpos) < 0.06 for other_xpos in prev_x_positions]):
+                    goal_i = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+                    goal_i_set = True
+
+                goal_i += self.target_offset
+                goal_i[2] = self.height_offset
+
+                if np.random.uniform() < 0.2 and not goal_in_air_used:
+                    goal_i[2] += self.np_random.uniform(0.03, 0.1)
+                    goal_in_air_used = True
+
+            prev_x_positions.append(goal_i[:2])
+            goals.append(goal_i)
+        goals.append([0.0, 0.0, 0.0])
+        if not return_extra_info:
+            return np.concatenate(goals, axis=0).copy()
+        else:
+            return np.concatenate(goals, axis=0).copy(), goals, number_of_goals_along_stack
+
+    def _is_success(self, achieved_goal, desired_goal):
+
+        distances = self.sub_goal_distances(achieved_goal, desired_goal)
+        if sum([-(d > self.distance_threshold).astype(np.float32) for d in distances]) == 0:
+            return True
+        else:
+            return False
+
+
+    def _env_setup(self, initial_qpos):
+        for name, value in initial_qpos.items():
+            self.sim.data.set_joint_qpos(name, value)
+        utils.reset_mocap_welds(self.sim)
         self.sim.forward()
-        obs = self._get_obs()
-        return obs
+
+        # Move end effector into position.
+        gripper_target = np.array([-0.498, 0.005, -0.431 + self.gripper_extra_height]) + self.sim.data.get_site_xpos('robot0:grip')
+        gripper_rotation = np.array([1., 0., 1., 0.])
+        self.sim.data.set_mocap_pos('robot0:mocap', gripper_target)
+        self.sim.data.set_mocap_quat('robot0:mocap', gripper_rotation)
+
+        for _ in range(10):
+            self.sim.step()
+
+            # Extract information for sampling goals.
+        self.initial_gripper_xpos = self.sim.data.get_site_xpos('robot0:grip').copy()
+        self.height_offset = self.sim.data.get_site_xpos('object0')[2]
 
     def _grasp(self, i):
         obj = self.sim.data.get_joint_qpos('{}:joint'.format(self.object_names[i]))

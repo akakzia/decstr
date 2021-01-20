@@ -1,5 +1,5 @@
 import torch
-from rl_modules.sac_agent import SACAgent
+from rl_modules.rl_agent import RLAgent
 import env
 import gym
 import numpy as np
@@ -166,12 +166,12 @@ if __name__ == '__main__':
     dict_goals = dict(zip([str(g) for g in all_goals], all_goals))
 
     policy_scores = []
-    for vae_id in range(9,10):
+    for vae_id in range(10):
         model_path = path + '/policy_models/model{}.pt'.format(vae_id + 1)
 
         # create the sac agent to interact with the environment
         if args.agent == "SAC":
-            policy = SACAgent(args, env.compute_reward, goal_sampler)
+            policy = RLAgent(args, env.compute_reward, goal_sampler)
             policy.load(model_path, args)
         else:
             raise NotImplementedError
