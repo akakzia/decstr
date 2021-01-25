@@ -9,7 +9,7 @@ We are interested in the autonomous acquisition of repertoires of skills. Langua
 
 You can find videos on the [paper's website](https://sites.google.com/view/decstr).
 
-The paper can be found on Arxiv [here]().
+The paper can be found on Arxiv [here](https://arxiv.org/abs/2006.07185).
 
 
 **Requirements**
