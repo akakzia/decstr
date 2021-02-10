@@ -276,12 +276,9 @@ class RLAgent:
     def load(self, model_path, args):
 
         if args.architecture == 'deepsets':
-            o_mean, o_std, g_mean, g_std, phi_a, phi_c, rho_a, rho_c, enc = torch.load(model_path, map_location=lambda storage, loc: storage)
-            self.model.single_phi_actor.load_state_dict(phi_a)
-            self.model.single_phi_critic.load_state_dict(phi_c)
-            self.model.rho_actor.load_state_dict(rho_a)
-            self.model.rho_critic.load_state_dict(rho_c)
-            self.model.critic_sentence_encoder.load_state_dict(enc)
+            o_mean, o_std, g_mean, g_std, actor_params, critic_params = torch.load(model_path, map_location=lambda storage, loc: storage)
+            self.model.actor.load_state_dict(actor_params)
+            self.model.critic.load_state_dict(critic_params)
             self.o_norm.mean = o_mean
             self.o_norm.std = o_std
             self.g_norm.mean = g_mean
