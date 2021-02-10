@@ -1,5 +1,3 @@
-import os
-import time
 import torch
 import argparse
 from torch.utils.data import DataLoader
@@ -9,8 +7,7 @@ from language.vae import ContextVAE
 from language.build_dataset import get_dataset
 import numpy as np
 import pickle
-import env
-import gym
+
 
 SAVE_PATH = './data/'
 def get_test_sets(configs, sentences, set_inds, all_possible_configs, str_to_index):
@@ -60,6 +57,11 @@ def main(args):
     for s_instr in split_instructions:
         inst_to_one_hot[' '.join(s_instr)] = one_hot_encoder.encode(s_instr)
 
+    with open(SAVE_PATH + 'inst_to_one_hot.pkl', 'wb') as f:
+        pickle.dump(inst_to_one_hot, f)
+
+    with open(SAVE_PATH + 'sentences_list.pkl', 'wb') as f:
+        pickle.dump(sorted(set_sentences), f)
 
     all_str = ['start' + str(c[0]) + s + str(c[1]) +'end' for c, s in zip(configs, sentences)]
     all_possible_configs_str = [str(c[0]) + s for c, s in zip(all_possible_configs, all_possible_sentences)]

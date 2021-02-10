@@ -34,11 +34,11 @@ Running the following line will trigger evaluation of a pre-trained agent. It wi
 You can run a pre-trained policy with a pre-trained language module. The language module is a generative model that samples a semantic goal configuration compatible with the 
 instruction. Many configurations can satisfy a given instructions. The following command shows our the agent satisfies single instructions.
 
-```python demo_sentece_test.py``` 
+```python demo_sentence_test.py``` 
 
 As the language module generates sets of compatible configuration, we can combine them to form any logical combinations of instructions. Try this with: 
 
-```python demo_sentece_expr.py``` 
+```python demo_sentence_expr.py``` 
 
 
 **Training DECSTR**
