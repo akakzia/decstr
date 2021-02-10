@@ -8,7 +8,6 @@ from rl_modules.rl_agent import RLAgent
 import random
 import torch
 from rollout import RolloutWorker
-from temporary_lg_goal_sampler import LanguageGoalSampler
 from goal_sampler import GoalSampler
 from utils import init_storage, get_instruction
 import time
@@ -57,7 +56,7 @@ def launch(args):
 
     if args.algo == 'language':
         language_goal = get_instruction()
-        goal_sampler = LanguageGoalSampler(args)
+        goal_sampler = GoalSampler(args)
     else:
         language_goal = None
         goal_sampler = GoalSampler(args)
