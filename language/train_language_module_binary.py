@@ -7,6 +7,7 @@ from language.vae import ContextVAE
 from language.build_dataset import get_dataset
 import numpy as np
 import pickle
+from utils import generate_goals
 
 
 SAVE_PATH = './data/'
@@ -66,6 +67,9 @@ def main(args):
     all_str = ['start' + str(c[0]) + s + str(c[1]) +'end' for c, s in zip(configs, sentences)]
     all_possible_configs_str = [str(c[0]) + s for c, s in zip(all_possible_configs, all_possible_sentences)]
 
+    # buckets = generate_goals()
+    # goals = [[int(p) for p in g] for b in buckets.values() for g in b]
+
     # Test set 1
     remove1 = [[[0, 1, 0, 0, 0, 0, 0, 0, 0], 'Put blue close_to green'],
                [[0, 0, 1, 0, 0, 0, 0, 0, 0], 'Put green below red']]
@@ -76,7 +80,9 @@ def main(args):
     remove2_str = ['start' + str(np.array(r)) for r in remove2]
 
     # Test set 3
+    # remove3_s = np.random.choice(list(set_sentences), size=12)
     remove3 = ['Put green on_top_of red', 'Put blue far_from red']
+    # remove3 = [s for s in remove3_s]
     remove3_str = remove3.copy()
 
     # Find indices of the different sets in the total dataset.
@@ -295,9 +301,15 @@ if __name__ == '__main__':
     latent_size = 27
     k_param = 0.6
 
-    vocab, configs, device, data_loader, inst_to_one_hot, train_test_data, set_inds, sentences, \
-    all_possible_configs, str_to_index = main(args)
+    num_eval = 10
 
-    train(vocab, configs, device, data_loader,
-          inst_to_one_hot, train_test_data, set_inds, sentences,
-          layers, embedding_size, latent_size, learning_rate,  k_param, all_possible_configs, str_to_index, args, 0)
+    for i in range(num_eval):
+        print('Cerva trova {} / {}'.format(i+1, num_eval))
+        vocab, configs, device, data_loader, inst_to_one_hot, train_test_data, set_inds, sentences, \
+        all_possible_configs, str_to_index = main(args)
+
+        train(vocab, configs, device, data_loader,
+              inst_to_one_hot, train_test_data, set_inds, sentences,
+              layers, embedding_size, latent_size, learning_rate, k_param, all_possible_configs, str_to_index, args, i)
+
+        args.seed = np.random.randint(1e6)

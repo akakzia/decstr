@@ -38,8 +38,10 @@ class ContextVAE(nn.Module):
                                        batch_first=True)
 
 
-        encoder_layer_sizes = [state_size * 2 + embedding_size] + inner_sizes
-        decoder_layer_sizes = [latent_size + state_size + embedding_size] + inner_sizes + [state_size]
+        # encoder_layer_sizes = [state_size * 2 + embedding_size] + inner_sizes
+        # decoder_layer_sizes = [latent_size + state_size + embedding_size] + inner_sizes + [state_size]
+        encoder_layer_sizes = [state_size + embedding_size] + inner_sizes
+        decoder_layer_sizes = [latent_size + embedding_size] + inner_sizes + [state_size]
         self.encoder = Encoder(encoder_layer_sizes, latent_size)
         self.decoder = Decoder(decoder_layer_sizes, binary=binary)
 
@@ -50,14 +52,16 @@ class ContextVAE(nn.Module):
 
 
         embeddings = self.sentence_encoder.forward(sentence)[0][:, -1, :]
-        means, log_var = self.encoder(torch.cat((initial_s, embeddings, current_s), dim=1))
+        # means, log_var = self.encoder(torch.cat((initial_s, embeddings, current_s), dim=1))
+        means, log_var = self.encoder(torch.cat((embeddings, current_s), dim=1))
 
         std = torch.exp(0.5 * log_var)
         eps = torch.randn([batch_size, self.latent_size])
         z = eps * std + means
 
 
-        recon_x = self.decoder(torch.cat((z, embeddings, initial_s), dim=1))
+        # recon_x = self.decoder(torch.cat((z, embeddings, initial_s), dim=1))
+        recon_x = self.decoder(torch.cat((z, embeddings), dim=1))
 
         return recon_x, means, log_var, z
 
@@ -67,7 +71,8 @@ class ContextVAE(nn.Module):
         z = torch.randn([batch_size, self.latent_size])
 
         embeddings = self.sentence_encoder.forward(sentence)[0][:, -1, :]
-        recon_state = self.decoder(torch.cat((z, embeddings, initial_s), dim=1))
+        # recon_state = self.decoder(torch.cat((z, embeddings, initial_s), dim=1))
+        recon_state = self.decoder(torch.cat((z, embeddings), dim=1))
 
         return recon_state
 
