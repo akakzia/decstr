@@ -18,6 +18,10 @@ from language.utils import get_corresponding_sentences
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
+CONDITIONAL_INFERENCE = False
+COLORS_TO_IDS = {'red': 0, 'green': 1, 'blue': 2}
+
+
 def get_env_params(env):
     obs = env.reset()
 
@@ -34,7 +38,14 @@ def sample_vae(vae, inst_to_one_hot, config_init, sentence, n=1):
     one_hot = np.repeat(one_hot, n, axis=0)
     c_i = np.repeat(c_i, n, axis=0)
     c_i, s = torch.Tensor(c_i).to(device), torch.Tensor(one_hot).to(device)
-    x = (vae.inference(c_i, s, n=n).detach().numpy() > 0.5).astype(np.int)
+    if CONDITIONAL_INFERENCE:
+        words = set(sentence.split(' '))
+        colors = set(COLORS_TO_IDS.keys())
+        l = list(words.intersection(colors))
+        p = (COLORS_TO_IDS[l[0]], COLORS_TO_IDS[l[1]])
+        x = (vae.inference(c_i, s, pair=p, n=n).detach().numpy() > 0.5).astype(np.int)
+    else:
+        x = (vae.inference(c_i, s, n=n).detach().numpy() > 0.5).astype(np.int)
 
     return x
 
@@ -73,11 +84,14 @@ def sample_vae_logic(vae, inst_to_one_hot, config_init, expression, dict_goals, 
 
 
 def rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, env, policy, env_params, inits, goals, self_eval, true_eval, biased_init=False, animated=False):
-    observation = env.unwrapped.reset_goal(np.array(goals[i]), init=inits[i], biased_init=biased_init)
+    observation = env.unwrapped.reset_goal(np.array(goals[i]), biased_init=biased_init)
 
     counter = 0
+    d = 0
+    # ss = ['put blue above red', 'put green above blue', 'bring blue and green apart', 'bring blue and red apart']
     while counter < 50:
         sentence = np.random.choice(sentences).lower()
+        # sentence = ss[counter % len(ss)].lower()
         reached = False
         # print(sentence)
         # env.render()
@@ -111,23 +125,26 @@ def rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, env
                 if sentence in true_sentences:
                     reached = True
                     counter += 1
+                    d += np.sum([np.linalg.norm(obs[10+15*k:13+15*k] - observation['observation'][10+15*j:13+15*j])
+                                 for k, j in [(0, 1), (0, 2), (1, 2)]])
                     break
                 else:
                     trial_counter += 1
-
             if not reached:
                 break
 
         else:
             print('Wrong sentence.')
-    print('Counter', counter)
-    return counter
+    # print('Counter', counter)
+    mean_distance = d/max(counter, 1)
+    # print('Mean distance', d/max(counter, 1))
+    return counter, mean_distance
 
 if __name__ == '__main__':
-    num_eval = 20
-    path = './trained_model/'
+    num_eval = 5
+    path = 'language/data/'
 
-    with open(path + 'config.json', 'r') as f:
+    with open('trained_model/config.json', 'r') as f:
         params = json.load(f)
     args = SimpleNamespace(**params)
 
@@ -155,10 +172,10 @@ if __name__ == '__main__':
 
 
 
-    with open(path + 'inst_to_one_hot.pkl', 'rb') as f:
+    with open(path + 'inst_to_one_hot_baseline.pkl', 'rb') as f:
         inst_to_one_hot = pickle.load(f)
 
-    with open(path + 'sentences_list.pkl', 'rb') as f:
+    with open(path + 'sentences_list_baseline.pkl', 'rb') as f:
         sentences = pickle.load(f)
 
     sentence_generator = get_corresponding_sentences
@@ -166,8 +183,9 @@ if __name__ == '__main__':
     dict_goals = dict(zip([str(g) for g in all_goals], all_goals))
 
     policy_scores = []
-    for vae_id in range(10):
-        model_path = path + '/policy_models/model{}.pt'.format(vae_id + 1)
+    policy_distances = []
+    for vae_id in range(1, 9):
+        model_path = 'trained_model/policy_model.pt'
 
         # create the sac agent to interact with the environment
         if args.agent == "SAC":
@@ -179,19 +197,25 @@ if __name__ == '__main__':
         # def rollout worker
         rollout_worker = RolloutWorker(env, policy, goal_sampler, args)
 
-        with open(path + 'vae_models/vae_model{}.pkl'.format(vae_id + 1), 'rb') as f:
+        with open(path + 'vae_model_baseline{}.pkl'.format(vae_id + 1), 'rb') as f:
             vae = torch.load(f)
 
         scores = []
+        distances = []
         for i in range(num_eval):
             print(i)
-            score = rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, env, policy, args.env_params, inits, eval_goals, self_eval=True, true_eval=True,
-                               animated=False)
+            score, mean_distance = rollout(sentence_generator, vae, sentences, inst_to_one_hot, dict_goals, env, policy,
+                                           args.env_params, inits, eval_goals, self_eval=True, true_eval=True, animated=False)
             scores.append(score)
-        print('Model #{}, average score: {}'.format(vae_id + 1, np.mean(scores)))
+            distances.append(mean_distance)
+        print('Model #{}, average score: {}, average_distance: {}'.format(vae_id + 1, np.mean(scores), np.mean(distances)))
         policy_scores.append(scores)
+        policy_distances.append(distances)
 
         results = np.array(policy_scores)
-        np.savetxt(path + 'sentence_seq.txt', results)
+        results_distances = np.array(policy_distances)
+        np.savetxt(path + 'sentence_seq_baseline.txt', results)
+        np.savetxt(path + 'sentence_seq_baseline.txt', results_distances)
     print('Av len sequence: {}'.format(results.mean(axis=1)))
+    print('Av distance: {}'.format(results_distances.mean(axis=1)))
 

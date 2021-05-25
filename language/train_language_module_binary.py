@@ -10,7 +10,10 @@ import pickle
 from utils import generate_goals
 
 
-SAVE_PATH = './data/'
+CONDITIONAL_INFERENCE = True
+COLORS_TO_IDS = {'red': 0, 'green': 1, 'blue': 2}
+
+SAVE_PATH = '/home/ahmed/Documents/DECSTR/ICLR2021_version/decstr/language/data/'
 def get_test_sets(configs, sentences, set_inds, all_possible_configs, str_to_index):
 
     configs = configs[set_inds]
@@ -226,7 +229,14 @@ def train(vocab, configs, device, data_loader, inst_to_one_hot, train_test_data,
             c_ii = np.repeat(c_ii, factor, axis=0)
             c_ii, s_one_hot = torch.Tensor(c_ii).to(device), torch.Tensor(one_hot).to(device)
 
-            x = (vae.inference(c_ii, s_one_hot, n=factor).detach().numpy() > 0.5).astype(np.int)
+            if CONDITIONAL_INFERENCE:
+                words = set(s.split(' '))
+                colors = set(COLORS_TO_IDS.keys())
+                l = list(words.intersection(colors))
+                p = (COLORS_TO_IDS[l[0]], COLORS_TO_IDS[l[1]])
+                x = (vae.inference(c_ii, s_one_hot, pair=p, n=factor).detach().numpy() > 0.5).astype(np.int)
+            else:
+                x = (vae.inference(c_ii, s_one_hot, n=factor).detach().numpy() > 0.5).astype(np.int)
 
 
             x_strs = [str(xi) for xi in x]
@@ -277,12 +287,10 @@ def train(vocab, configs, device, data_loader, inst_to_one_hot, train_test_data,
     return results.copy()
 
 
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=np.random.randint(1e6))
-    parser.add_argument("--epochs", type=int, default=60)
+    parser.add_argument("--epochs", type=int, default=200)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--learning_rate", type=float, default=0.005)
     parser.add_argument("--encoder_layer_sizes", type=list, default=[784, 256])
@@ -301,7 +309,7 @@ if __name__ == '__main__':
     latent_size = 27
     k_param = 0.6
 
-    num_eval = 10
+    num_eval = 1
 
     for i in range(num_eval):
         print('Cerva trova {} / {}'.format(i+1, num_eval))
@@ -311,5 +319,3 @@ if __name__ == '__main__':
         train(vocab, configs, device, data_loader,
               inst_to_one_hot, train_test_data, set_inds, sentences,
               layers, embedding_size, latent_size, learning_rate, k_param, all_possible_configs, str_to_index, args, i)
-
-        args.seed = np.random.randint(1e6)

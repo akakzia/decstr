@@ -3,7 +3,7 @@ import pickle
 
 def get_data(binary=True):
 
-    path_config_transitions_reached = "./data/learned_configs_continuous.pkl"
+    path_config_transitions_reached = '/home/ahmed/Documents/DECSTR/ICLR2021_version/decstr/language/data/learned_configs_continuous.pkl'
 
     with open(path_config_transitions_reached, 'rb') as f:
         reached_config_transitions = pickle.load(f)
