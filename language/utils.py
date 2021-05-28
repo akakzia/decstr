@@ -501,3 +501,114 @@ def generate_all_goals_in_goal_space():
                                         goals.append([a, b, c, d, e, f, g, h, i])
 
     return np.array(goals)
+
+
+def get_test_sets(configs, sentences, set_inds, all_possible_configs, str_to_index):
+    configs = configs[set_inds]
+    sentences = np.array(sentences)[set_inds].tolist()
+
+    config_init_and_sentence = []
+    for i in range(configs.shape[0]):
+        config_init_and_sentence.append(str(configs[i, 0]) + sentences[i])
+    unique, idx, idx_in_array = np.unique(np.array(config_init_and_sentence), return_inverse=True, return_index=True)
+    train_inits = []  # contains initial configurations
+    train_sents = []  # contains sentences
+    train_finals_dataset = []  # contains all compatible final configurations found in data
+    train_finals_possible = []  # contains all compatible final configurations (oracle)
+    for i, i_array in enumerate(idx):
+        train_inits.append(configs[i_array, 0])
+        train_sents.append(sentences[i_array])
+        idx_finals = np.argwhere(idx_in_array == i).flatten()
+        init_sent_str = config_init_and_sentence[i_array]
+        final_confs = all_possible_configs[str_to_index[init_sent_str], 1]
+        final_str = [str(c) for c in final_confs]
+        train_finals_possible.append(list(set(final_str)))
+        c_f_dataset = [str(c) for c in configs[idx_finals, 1]]
+        train_finals_dataset.append(list(set(c_f_dataset)))
+
+    return train_inits, train_sents, train_finals_dataset, train_finals_possible
+
+
+def split_data(configs, sentences, all_possible_configs, all_possible_sentences, inst_to_one_hot):
+    all_str = ['start' + str(c[0]) + s + str(c[1]) + 'end' for c, s in zip(configs, sentences)]
+    all_possible_configs_str = [str(c[0]) + s for c, s in zip(all_possible_configs, all_possible_sentences)]
+
+    # Test set 1
+    remove1 = [[[0, 1, 0, 0, 0, 0, 0, 0, 0], 'Put blue close_to green'],
+               [[0, 0, 1, 0, 0, 0, 0, 0, 0], 'Put green below red']]
+    remove1_str = ['start' + str(np.array(r[0])) + r[1] for r in remove1]
+
+    # Test set 2
+    remove2 = [[1, 1, 0, 0, 0, 0, 0, 0, 0]]
+    remove2_str = ['start' + str(np.array(r)) for r in remove2]
+
+    # Test set 3
+    remove3 = ['Put green on_top_of red', 'Put blue far_from red']
+    remove3_str = remove3.copy()
+
+    # Find indices of the different sets in the total dataset.
+    set_ids = [[] for _ in range(5)]
+    ids_final = []
+    for i, s in enumerate(all_str):
+        to_remove = False
+        used = False
+
+        if not used:
+            for s1 in remove1_str:
+                if s1 in s:
+                    set_ids[1].append(i)
+                    used = True
+                    break
+
+        if not used:
+            for s2 in remove2_str:
+                if s2 in s:
+                    does_s_also_contains_s_from_r3 = False
+                    for s3 in remove3_str:
+                        if s2 + s3 in s:
+                            does_s_also_contains_s_from_r3 = True
+                    used = True
+                    if not does_s_also_contains_s_from_r3:
+                        set_ids[2].append(i)
+                    else:
+                        set_ids[4].append(i)
+                    break
+
+        if not used:
+            for s3 in remove3_str:
+                if s3 in s:
+                    does_s_also_contains_s_from_r2 = False
+                    for s2 in remove2_str:
+                        if s2 + s3 in s:
+                            does_s_also_contains_s_from_r2 = True
+                    used = True
+                    if not does_s_also_contains_s_from_r2:
+                        set_ids[3].append(i)
+                    else:
+                        set_ids[4].append(i)
+                    break
+
+        if not used and not to_remove:
+            set_ids[0].append(i)
+
+    assert np.sum([len(ind) for ind in set_ids]) + len(ids_final) == len(all_str)
+
+    # dictionary translating string of init config and sentence to all possible final config (id in all_possible_configs)
+    # including the ones in the dataset, but also other synthetic ones. This is used for evaluation
+    str_to_index = dict()
+    for i_s, s in enumerate(all_possible_configs_str):
+        if s in str_to_index.keys():
+            str_to_index[s].append(i_s)
+        else:
+            str_to_index[s] = [i_s]
+    for k in str_to_index.keys():
+        str_to_index[k] = np.array(str_to_index[k])
+
+    valid_ids = np.array(set_ids[0])
+    dataset = ConfigLanguageDataset(configs[valid_ids],
+                                    np.array(sentences)[valid_ids].tolist(),
+                                    None,
+                                    inst_to_one_hot,
+                                    binary=False)
+
+    return set_ids, dataset, str_to_index

@@ -3,9 +3,6 @@ import torch.nn as nn
 from itertools import combinations
 
 
-RELATIONAL = True
-
-
 def idx2onehot(idx, n):
 
     assert torch.max(idx).item() < n
@@ -17,14 +14,15 @@ def idx2onehot(idx, n):
 
     return onehot
 
+
 class ContextVAE(nn.Module):
 
-    def __init__(self, nb_words, inner_sizes=[32], state_size=9, embedding_size=20, latent_size=9, binary=True):
-
+    def __init__(self, nb_words, encoder_inner_sizes=[32], decoder_inner_sizes=[32], state_size=9, embedding_size=20,
+                 latent_size=9, binary=True, relational=False):
         super().__init__()
 
-
-        assert type(inner_sizes) == list
+        assert type(encoder_inner_sizes) == list
+        assert type(decoder_inner_sizes) == list
         assert type(latent_size) == int
         assert type(state_size) == int
         assert type(embedding_size) == int
@@ -33,8 +31,6 @@ class ContextVAE(nn.Module):
         self.state_size = state_size
         self.embedding_size = embedding_size
 
-
-
         self.sentence_encoder = nn.RNN(input_size=nb_words,
                                        hidden_size=embedding_size,
                                        num_layers=1,
@@ -42,14 +38,16 @@ class ContextVAE(nn.Module):
                                        bias=True,
                                        batch_first=True)
 
-        if not RELATIONAL:
-            encoder_layer_sizes = [state_size * 2 + embedding_size] + inner_sizes
-            decoder_layer_sizes = [latent_size + state_size + embedding_size] + inner_sizes + [state_size]
+        self.relational = relational
+
+        if not self.relational:
+            encoder_layer_sizes = [state_size * 2 + embedding_size] + encoder_inner_sizes
+            decoder_layer_sizes = [latent_size + state_size + embedding_size] + decoder_inner_sizes + [state_size]
             self.encoder = Encoder(encoder_layer_sizes, latent_size)
             self.decoder = Decoder(decoder_layer_sizes, binary=binary)
         else:
-            encoder_layer_sizes = [3 * 2 + 3 * 2 + embedding_size] + inner_sizes
-            decoder_layer_sizes = [latent_size + 3 + 2*3 + embedding_size] + inner_sizes + [3]
+            encoder_layer_sizes = [3 * 2 + 3 * 2 + embedding_size] + encoder_inner_sizes
+            decoder_layer_sizes = [latent_size + 3 + 2*3 + embedding_size] + decoder_inner_sizes + [3]
             self.encoder = RelationalEncoder(encoder_layer_sizes, latent_size)
             self.decoder = RelationalDecoder(decoder_layer_sizes, binary=binary)
 
@@ -58,9 +56,8 @@ class ContextVAE(nn.Module):
         batch_size = current_s.size(0)
         assert current_s.size(0) == initial_s.size(0) == sentence.size(0)
 
-
         embeddings = self.sentence_encoder.forward(sentence)[0][:, -1, :]
-        if not RELATIONAL:
+        if not self.relational:
             means, log_var = self.encoder(torch.cat((initial_s, embeddings, current_s), dim=1))
         else:
             means, log_var = self.encoder(initial_s, embeddings, current_s)
@@ -69,7 +66,7 @@ class ContextVAE(nn.Module):
         eps = torch.randn([batch_size, self.latent_size])
         z = eps * std + means
 
-        if not RELATIONAL:
+        if not self.relational:
             recon_x = self.decoder(torch.cat((z, embeddings, initial_s), dim=1))
             return recon_x, means, log_var, z
         else:
@@ -80,7 +77,7 @@ class ContextVAE(nn.Module):
 
         batch_size = n
         embeddings = self.sentence_encoder.forward(sentence)[0][:, -1, :]
-        if not RELATIONAL:
+        if not self.relational:
             z = torch.randn([batch_size, self.latent_size])
             recon_state = self.decoder(torch.cat((z, embeddings, initial_s), dim=1))
         else:
