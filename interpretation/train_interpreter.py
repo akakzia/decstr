@@ -4,7 +4,7 @@ import numpy as np
 import pickle
 from utils import GraphDataset
 from collections import defaultdict
-from models import SimpleCVAE
+from models import SimpleCVAE, Hulk
 
 def load_data(n=3, minimal=False):
     """
@@ -50,20 +50,21 @@ if __name__ == '__main__':
     batch_size = 128
     k_param = 0.6
     learning_rate = 0.005
-    epochs = 150
+    epochs = 200
 
-    for k in range(5):
+    for k in range(1):
         print('Seed {} / 5'.format(k + 1))
         seed = np.random.randint(1e6)
         np.random.seed(seed)
         torch.manual_seed(seed)
 
-        data = load_data(minimal=True)
-        data_train, data_test, data_validation = split_data(data, train_prop=0.05, test_prop=0.8)
+        data = load_data()
+        data_train, data_test, data_validation = split_data(data, train_prop=0.05, test_prop=0.5)
         dataset = GraphDataset(data_train[0], data_train[1], data_train[2], shuffle=True)
         data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
 
-        vae = SimpleCVAE()
+        # vae = SimpleCVAE()
+        vae = Hulk()
 
         logs = defaultdict(list)
 
@@ -74,15 +75,21 @@ if __name__ == '__main__':
             bce = torch.nn.functional.binary_cross_entropy(recon_x, x, reduction='sum')
             kld = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
             return (bce + k_param * kld) / x.size(0)
+            # return (bce + k_param * kld) / np.prod(x.shape)
 
 
         for epoch in range(epochs + 1):
             for iteration, (states, p_close, p_above) in enumerate(data_loader):
                 # TODO device add
-                recon_state, mean, log_var, z = vae(states, p_close)
+                recon_state_p1, mean_p1, log_var_p1, z_p1, \
+                recon_state_p2, mean_p2, log_var_p2, z_p2 = vae(states, p_close, p_above)
 
-                target = p_close[:, 0].unsqueeze(-1)
-                loss = loss_fn(recon_state, target, mean, log_var)
+                target_p1 = p_close
+                target_p2 = p_above
+                loss_p1 = loss_fn(recon_state_p1, target_p1, mean_p1, log_var_p1)
+                loss_p2 = loss_fn(recon_state_p2, target_p2, mean_p2, log_var_p2)
+
+                loss = loss_p1 + loss_p2
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -92,6 +99,9 @@ if __name__ == '__main__':
                 stop = 1
 
         s = torch.Tensor(data_test[0])
-        p1 = data_test[1][:, 0].astype(np.int)
-        x = (vae.inference(s, n=1).detach().numpy() > 0.5).astype(np.int)[:, 0]
-        print('Precision: {}'.format(np.sum(x == p1) / x.shape[0]))
+        p1 = data_test[1].astype(np.int)
+        p2 = data_test[2].astype(np.int)
+        x1 = (vae.inference(s, predicate_id=0).detach().numpy() > 0.5).astype(np.int)
+        x2 = (vae.inference(s, predicate_id=1).detach().numpy() > 0.5).astype(np.int)
+        print('Precision 1: {}'.format(np.mean(x1 == p1)))
+        print('Precision 2: {}'.format(np.mean(x2 == p2)))
