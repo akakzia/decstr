@@ -52,14 +52,14 @@ if __name__ == '__main__':
     learning_rate = 0.005
     epochs = 200
 
-    for k in range(1):
+    for k in range(5):
         print('Seed {} / 5'.format(k + 1))
         seed = np.random.randint(1e6)
         np.random.seed(seed)
         torch.manual_seed(seed)
 
         data = load_data()
-        data_train, data_test, data_validation = split_data(data, train_prop=0.05, test_prop=0.5)
+        data_train, data_test, data_validation = split_data(data, train_prop=0.05, test_prop=0.2)
         dataset = GraphDataset(data_train[0], data_train[1], data_train[2], shuffle=True)
         data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
 
@@ -74,7 +74,7 @@ if __name__ == '__main__':
         def loss_fn(recon_x, x, mean, log_var):
             bce = torch.nn.functional.binary_cross_entropy(recon_x, x, reduction='sum')
             kld = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
-            return (bce + k_param * kld) / x.size(0)
+            return (bce + k_param * kld) / np.prod(x.shape)
             # return (bce + k_param * kld) / np.prod(x.shape)
 
 
@@ -101,7 +101,11 @@ if __name__ == '__main__':
         s = torch.Tensor(data_test[0])
         p1 = data_test[1].astype(np.int)
         p2 = data_test[2].astype(np.int)
-        x1 = (vae.inference(s, predicate_id=0).detach().numpy() > 0.5).astype(np.int)
-        x2 = (vae.inference(s, predicate_id=1).detach().numpy() > 0.5).astype(np.int)
+        # x1 = (vae.inference(s, predicate_id=0).detach().numpy() > 0.5).astype(np.int)
+        # x2 = (vae.inference(s, predicate_id=1).detach().numpy() > 0.5).astype(np.int)
+        x1, x2 = vae.inference(s)
+        x1 = (x1.detach().numpy() > 0.5).astype(np.int)
+        x2 = (x2.detach().numpy() > 0.5).astype(np.int)
+        # x1, x2 = (vae.inference(s).detach().numpy() > 0.5).astype(np.int)
         print('Precision 1: {}'.format(np.mean(x1 == p1)))
         print('Precision 2: {}'.format(np.mean(x2 == p2)))
