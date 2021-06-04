@@ -2,7 +2,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
+from torch.autograd import Variable
+import numpy as np
 
+
+def to_categorical(y, num_columns):
+    """Returns one-hot encoded Variable"""
+    y_cat = np.zeros((y.shape[0], num_columns))
+    y_cat[range(y.shape[0]), y] = 1.0
+
+    return Variable(torch.FloatTensor(y_cat))
 
 def init_weights(m):
     if type(m) == nn.Linear:
@@ -54,38 +63,89 @@ class GATLayer(nn.Module):
 
 class SimpleCVAE(nn.Module):
 
-    def __init__(self, state_size=3, latent_size=1):
+    def __init__(self, inner_sizes=[128, 128], state_size=3, latent_size=1):
         super().__init__()
 
+        assert type(inner_sizes) == list
         assert type(latent_size) == int
         assert type(state_size) == int
 
         self.latent_size = latent_size
+        self.state_size = state_size
 
-        self.encoder = Encoder(state_size + 1, latent_size)
-        self.decoder = Decoder(latent_size + state_size, 1)
+        encoder_layer_sizes = [state_size] + inner_sizes
+        decoder_layer_sizes = [latent_size] + inner_sizes + [state_size]
 
-    def forward(self, state, p):
+        self.encoder = SimpleEncoder(encoder_layer_sizes, latent_size)
+        self.decoder = SimpleDecoder(decoder_layer_sizes)
 
+    def forward(self, state):
         batch_size = state.size(0)
-        assert state.size(0) == p.size(0)
-
-        means, log_var = self.encoder(torch.cat((state[:, 0] - state[:, 1], p[:, 0].unsqueeze(-1)), dim=-1))
+        state = torch.cat([state[:, 0], state[:, 0], abs(state[:, 0] - state[:, 1])], dim=-1)
+        # state = state.reshape(batch_size, state.size(1) * state.size(2))
+        means, log_var = self.encoder(state)
 
         std = torch.exp(0.5 * log_var)
         eps = torch.randn([batch_size, self.latent_size])
         z = eps * std + means
 
-        recon_x = self.decoder(torch.cat((z, state[:, 0] - state[:, 1]), dim=1))
+        recon_x = self.decoder(z)
         return recon_x, means, log_var, z
 
-    def inference(self, state, n=1):
+    def inference(self, n=1):
 
-        batch_size = state.size(0)
+        batch_size = n
         z = torch.randn([batch_size, self.latent_size])
-        recon_state = self.decoder(torch.cat((z, state[:, 0] - state[:, 1]), dim=1))
+        recon_state = self.decoder(z)
 
         return recon_state
+
+
+class SimpleEncoder(nn.Module):
+
+    def __init__(self, layer_sizes, latent_size):
+
+        super().__init__()
+
+        self.MLP = nn.Sequential()
+        for i, (in_size, out_size) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:])):
+            self.MLP.add_module(
+                name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
+            self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
+
+        self.linear_means = nn.Linear(layer_sizes[-1], latent_size)
+        self.linear_log_var = nn.Linear(layer_sizes[-1], latent_size)
+
+    def forward(self, x):
+
+        x = self.MLP(x)
+        x = x.sum(0)
+
+        means = self.linear_means(x)
+        log_vars = self.linear_log_var(x)
+
+        return means, log_vars
+
+
+class SimpleDecoder(nn.Module):
+
+    def __init__(self, layer_sizes):
+
+        super().__init__()
+
+        self.MLP = nn.Sequential()
+
+        for i, (in_size, out_size) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:])):
+            self.MLP.add_module(
+                name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
+            if i + 2 < len(layer_sizes):
+                self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
+
+
+    def forward(self, z):
+
+        x = self.MLP(z)
+        return x
 
 
 class Encoder(nn.Module):
@@ -171,124 +231,39 @@ class Decoder(nn.Module):
 
 class Hulk(MessagePassing):
 
-    def __init__(self, nodes=3, state_size=3, latent_size=1):
+    def __init__(self, inner_sizes=[128, 128], state_size=3, latent_size=1):
         super().__init__()
 
+        assert type(inner_sizes) == list
         assert type(latent_size) == int
         assert type(state_size) == int
 
         self.latent_size = latent_size
+        self.state_size = state_size
 
-        self.encoder = Encoder(state_size + 1, latent_size)
-        self.decoder = Decoder(latent_size + state_size, 1)
+        encoder_layer_sizes = [state_size] + inner_sizes
+        decoder_layer_sizes = [latent_size] + inner_sizes + [state_size]
 
-        self.nb_nodes = nodes
-        # This order for reshape later
-        self.edge_index = torch.tensor([[0, 1, 0, 2, 1, 2], [1, 0, 2, 0, 2, 1]], dtype=torch.long)
+        self.encoder = SimpleEncoder(encoder_layer_sizes, latent_size)
+        self.decoder = SimpleDecoder(decoder_layer_sizes)
 
-    def forward(self, state, p1, p2):
+    def forward(self, state):
         batch_size = state.size(0)
-        assert state.size(0) == p1.size(0) == p2.size(0)
+        state = torch.stack([torch.cat([state[:, i, :], state[:, j, :], abs(state[:, i, :] - state[:, j, :])], dim=-1)
+                           for i, j in [(0, 1), (0, 2), (1, 2)]])
+        # state = state.reshape(batch_size, state.size(1) * state.size(2))
+        means, log_var = self.encoder(state)
 
-        #Matrixify
-        # Transform predicates to matrices for easy handling in the graph
-        p1_m = torch.zeros((p1.size(0), self.nb_nodes, self.nb_nodes))
-        p2_m = torch.zeros((p2.size(0), self.nb_nodes, self.nb_nodes))
+        std = torch.exp(0.5 * log_var)
+        eps = torch.randn([batch_size, self.latent_size])
+        z = eps * std + means
 
-        old, new = [(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)], [(0, 1), (1, 0), (0, 2), (2, 0), (1, 2), (2, 1)]
-        for o, n in zip(old, new):
-            p1_m[:, n[0], n[1]] = p1[:, o[0], o[1]]
-            p2_m[:, n[0], n[1]] = p2[:, o[0], o[1]]
+        recon_x = self.decoder(z)
+        return recon_x, means, log_var, z
 
+    def inference(self, n=1):
+        batch_size = n
+        z = torch.randn([batch_size, self.latent_size])
+        recon_state = self.decoder(z)
 
-        row, col = self.edge_index
-        edge_features_input_p1 = torch.stack([torch.cat((state[:, i] - state[:, j], p1_m[:, i, j].unsqueeze(-1)), dim=-1)
-                                              for i, j in zip(row, col)], dim=1)
-
-        edge_features_input_p2 = torch.stack([torch.cat((state[:, i] - state[:, j], p2_m[:, i, j].unsqueeze(-1)), dim=-1)
-                                              for i, j in zip(row, col)], dim=1)
-
-        means, log_vars = self.encoder([edge_features_input_p1, edge_features_input_p2])
-
-        means_p1 = means[0]
-        means_p2 = means[1]
-        log_var_p1 = log_vars[0]
-        log_var_p2 = log_vars[1]
-
-        z = []
-        decoder_inputs = []
-        for k, (m, l) in enumerate(zip(means, log_vars)):
-            eps = torch.randn([batch_size, 6, self.latent_size])
-
-            std = torch.exp(0.5 * l)
-            z_c = eps * std + m
-
-            # std_p2 = torch.exp(0.5 * log_var_p2)
-            # z_p2 = eps * std_p2 + means_p2
-
-            z_c_m = torch.randn((z_c.size(0), self.nb_nodes, self.nb_nodes))
-            new = [(0, 1), (1, 0), (0, 2), (2, 0), (1, 2), (2, 1)]
-            for i, n in enumerate(new):
-                z_c_m[:, n[0], n[1]] = z_c[:, i, 0]
-                # z_c_m[:, n[0], n[1]] = z_c[:, i, 0]
-
-            # z_m.append(z_c_m)
-            decoder_inputs.append(torch.stack([torch.cat((z_c_m[:, i, j].unsqueeze(-1), state[:, i] - state[:, j]), dim=-1)
-                                                           for i, j in zip(row, col)], dim=1))
-            z.append(z_c)
-
-
-        # decoder_edges_features_input_p1 = torch.stack([torch.cat((z_m[0][:, i, j].unsqueeze(-1), state[:, i] - state[:, j]), dim=-1)
-        #                                       for i, j in zip(row, col)], dim=1)
-
-        # z_p2_m = torch.zeros((z_p2.size(0), self.nb_nodes, self.nb_nodes))
-        # new = [(0, 1), (1, 0), (0, 2), (2, 0), (1, 2), (2, 1)]
-        # for i, n in enumerate(new):
-        #     z_p2_m[:, n[0], n[1]] = z_p2[:, i, 0]
-        #     z_p2_m[:, n[0], n[1]] = z_p2[:, i, 0]
-
-        # decoder_edges_features_input_p2 = torch.stack([torch.cat((z_m[1][:, i, j].unsqueeze(-1), state[:, i] - state[:, j]), dim=-1)
-        #                                                for i, j in zip(row, col)], dim=1)
-
-
-        # recon_x_p1, recon_x_p2 = self.decoder(decoder_edges_features_input_p1, decoder_edges_features_input_p2)
-        recon_x = self.decoder(decoder_inputs[0], decoder_inputs[1])
-        for i in range(2):
-            recon_x[i] = recon_x[i].reshape(recon_x[i].size(0), self.nb_nodes, 2)
-            means[i] = means[i].reshape(means[i].size(0), self.nb_nodes, 2)
-            log_vars[i] = log_vars[i].reshape(log_vars[i].size(0), self.nb_nodes, 2)
-
-        return recon_x[0], means[0], log_vars[0], z[0], recon_x[1], means[1], log_vars[1], z[1]
-
-        # recon_x_p1 = recon_x_p1.reshape(recon_x_p1.size(0), self.nb_nodes, 2)
-        # means_p1 = means_p1.reshape(means_p1.size(0), self.nb_nodes, 2)
-        # log_var_p1 = log_var_p1.reshape(log_var_p1.size(0), self.nb_nodes, 2)
-        #
-        # recon_x_p2 = recon_x_p2.reshape(recon_x_p2.size(0), self.nb_nodes, 2)
-        # means_p2 = means_p2.reshape(means_p2.size(0), self.nb_nodes, 2)
-        # log_var_p2 = log_var_p2.reshape(log_var_p2.size(0), self.nb_nodes, 2)
-
-        # return recon_x_p1, means_p1, log_var_p1, z[0], recon_x_p2, means_p2, log_var_p2, z[1]
-
-    def inference(self, state, nb_predicates=2):
-        batch_size = state.size(0)
-        z1 = torch.randn([batch_size, 6, self.latent_size])
-        z2 = torch.randn([batch_size, 6, self.latent_size])
-        recon_state = self.decoder(torch.stack([torch.cat((z1[:, 0, :], state[:, 0] - state[:, 1]), dim=1),
-                                                       torch.cat((z1[:, 1, :], state[:, 1] - state[:, 0]), dim=1),
-                                                       torch.cat((z1[:, 2, :], state[:, 0] - state[:, 2]), dim=1),
-                                                       torch.cat((z1[:, 3, :], state[:, 2] - state[:, 0]), dim=1),
-                                                       torch.cat((z1[:, 4, :], state[:, 1] - state[:, 2]), dim=1),
-                                                       torch.cat((z1[:, 5, :], state[:, 2] - state[:, 1]), dim=1),
-                                                       ], dim=1),
-                                                     torch.stack([torch.cat((z2[:, 0, :], state[:, 0] - state[:, 1]), dim=1),
-                                                                  torch.cat((z2[:, 1, :], state[:, 1] - state[:, 0]), dim=1),
-                                                                  torch.cat((z2[:, 2, :], state[:, 0] - state[:, 2]), dim=1),
-                                                                  torch.cat((z2[:, 3, :], state[:, 2] - state[:, 0]), dim=1),
-                                                                  torch.cat((z2[:, 4, :], state[:, 1] - state[:, 2]), dim=1),
-                                                                  torch.cat((z2[:, 5, :], state[:, 2] - state[:, 1]), dim=1),
-                                                                  ], dim=1)
-                                                     )
-        recon_state_1 = recon_state[0].reshape(recon_state[0].size(0), self.nb_nodes, 2)
-        recon_state_2 = recon_state[1].reshape(recon_state[1].size(0), self.nb_nodes, 2)
-        return recon_state_1, recon_state_2
+        return recon_state

@@ -1,33 +1,25 @@
 import torch
 from torch.utils.data import DataLoader
+from torch.autograd import Variable
 import numpy as np
 import pickle
 from utils import GraphDataset
 from collections import defaultdict
-from models import SimpleCVAE, Hulk
+from models import SimpleCVAE, Hulk, to_categorical
+import env
+import time
+import gym
+
 
 def load_data(n=3, minimal=False):
     """
     Load the dataset of configurations and geometric states
-    Return the loaded data in the form of a graph
-    Each node contains geometric states of a specific object
-    Each predicate is associated with an edge
-    n: number of objects
-    minimal: if true, returns only predicates between two objects (only two nodes are considered)
     """
-    n_comb = n * (n - 1) // 2
-    path_config_transitions_reached = '/home/ahmed/Documents/DECSTR/ICLR2021_version/decstr/language/data/learned_configs_continuous.pkl'
-    with open(path_config_transitions_reached, 'rb') as f:
-        config_states = pickle.load(f)
-    configs = np.concatenate([config_states[:, 0, :], config_states[:, 1, :]])
-    states = np.concatenate([config_states[:, 2, :], config_states[:, 3, :]])
+    path_states_configs = '/home/ahmed/Documents/DECSTR/ICLR2021_version/decstr/interpretation/states_configs_no_rot.pkl'
+    with open(path_states_configs, 'rb') as f:
+        state, configs = pickle.load(f)
 
-    states = states.reshape(states.shape[0], n, 3)
-    p_close = configs[:, :n_comb].reshape(configs.shape[0], n, 1).repeat(2, axis=-1)
-    p_above = np.stack([configs[:, [3, 5, 7]], configs[:, [4, 6, 8]]], axis=-1)
-    if minimal:
-        return states[:, :2], p_close[:, 0], p_above[:, 0]
-    return states, p_close, p_above
+    return state, configs
 
 def split_data(df, train_prop=0.6, test_prop=0.2):
     """
@@ -47,49 +39,48 @@ def split_data(df, train_prop=0.6, test_prop=0.2):
     return train_data, test_data, validation_data
 
 if __name__ == '__main__':
-    batch_size = 128
+    batch_size = 256
     k_param = 0.6
     learning_rate = 0.005
-    epochs = 200
+    epochs = 60
 
-    for k in range(5):
+    for k in range(1):
         print('Seed {} / 5'.format(k + 1))
         seed = np.random.randint(1e6)
         np.random.seed(seed)
         torch.manual_seed(seed)
 
         data = load_data()
-        data_train, data_test, data_validation = split_data(data, train_prop=0.05, test_prop=0.2)
-        dataset = GraphDataset(data_train[0], data_train[1], data_train[2], shuffle=True)
+        data_train, data_test, data_validation = split_data(data, train_prop=0.1, test_prop=0.2)
+        dataset = GraphDataset(data_train[0], data_train[1])
         data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
 
-        # vae = SimpleCVAE()
-        vae = Hulk()
+        # vae = SimpleCVAE(state_size=9, latent_size=27)
+        vae = Hulk(state_size=9, latent_size=27)
 
         logs = defaultdict(list)
 
         optimizer = torch.optim.Adam(vae.parameters(), lr=learning_rate)
+        optimizer_info = torch.optim.Adam(vae.parameters(), lr=learning_rate)
 
 
         def loss_fn(recon_x, x, mean, log_var):
-            bce = torch.nn.functional.binary_cross_entropy(recon_x, x, reduction='sum')
+            mse = torch.nn.functional.mse_loss(recon_x, x, reduction='mean')
             kld = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
-            return (bce + k_param * kld) / np.prod(x.shape)
-            # return (bce + k_param * kld) / np.prod(x.shape)
+            return (mse + k_param * kld) / x.size(0)
 
 
         for epoch in range(epochs + 1):
-            for iteration, (states, p_close, p_above) in enumerate(data_loader):
+            for iteration, (states, configs) in enumerate(data_loader):
                 # TODO device add
-                recon_state_p1, mean_p1, log_var_p1, z_p1, \
-                recon_state_p2, mean_p2, log_var_p2, z_p2 = vae(states, p_close, p_above)
+                # recon_state_p1, mean_p1, log_var_p1, z_p1, \
+                # recon_state_p2, mean_p2, log_var_p2, z_p2 = vae(states, p_close, p_above)
+                recon_state, mean, log_var, z = vae(states)
 
-                target_p1 = p_close
-                target_p2 = p_above
-                loss_p1 = loss_fn(recon_state_p1, target_p1, mean_p1, log_var_p1)
-                loss_p2 = loss_fn(recon_state_p2, target_p2, mean_p2, log_var_p2)
-
-                loss = loss_p1 + loss_p2
+                target = states.reshape(states.size(0), states.size(1) * states.size(2))
+                # target = states[:, 0]
+                # target = torch.cat([states[:, 0], states[:, 0], abs(states[:, 0] - states[:, 1])], dim=-1)
+                loss = loss_fn(recon_state, target, mean, log_var)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -97,15 +88,15 @@ if __name__ == '__main__':
 
                 logs['loss'].append(loss.item())
                 stop = 1
+            print('Epoch {} / {} ---- | Loss = {}'.format(epoch, epochs, loss.item()))
 
         s = torch.Tensor(data_test[0])
-        p1 = data_test[1].astype(np.int)
-        p2 = data_test[2].astype(np.int)
-        # x1 = (vae.inference(s, predicate_id=0).detach().numpy() > 0.5).astype(np.int)
-        # x2 = (vae.inference(s, predicate_id=1).detach().numpy() > 0.5).astype(np.int)
-        x1, x2 = vae.inference(s)
-        x1 = (x1.detach().numpy() > 0.5).astype(np.int)
-        x2 = (x2.detach().numpy() > 0.5).astype(np.int)
-        # x1, x2 = (vae.inference(s).detach().numpy() > 0.5).astype(np.int)
-        print('Precision 1: {}'.format(np.mean(x1 == p1)))
-        print('Precision 2: {}'.format(np.mean(x2 == p2)))
+
+        # x1 = vae.inference(n=120).detach().numpy().reshape(40, 3, 6)
+        x1 = vae.inference(n=120).detach().numpy().reshape(120, 3, 3)
+        env = gym.make('FetchManipulate3Objects-v0')
+        for i in range(10):
+            env.reset_positions(x1[i])
+            env.render()
+            time.sleep(1)
+            stop = 1

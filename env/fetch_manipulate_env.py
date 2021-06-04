@@ -377,3 +377,21 @@ class FetchManipulateEnv(robot_env.RobotEnv):
         self.sim.data.set_joint_qpos('{}:joint'.format(self.object_names[i]), obj.copy())
         self.sim.data.set_joint_qpos('robot0:r_gripper_finger_joint', 0.0240)
         self.sim.data.set_joint_qpos('robot0:l_gripper_finger_joint', 0.0240)
+
+    def reset_positions(self, positions):
+        if len(positions) < 3:
+            aa = np.zeros((1,3))
+            positions = np.concatenate([positions, np.zeros((1,3))])
+        self.target_goal = np.zeros([9])
+
+        self.sim.set_state(self.initial_state)
+
+        for i, (obj_name, position) in enumerate(zip(self.object_names, positions)):
+            object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(obj_name))
+            assert object_qpos.shape == (7,)
+            object_qpos[:3] = position
+            self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
+
+        self.sim.forward()
+        obs = self._get_obs()
+        return obs
