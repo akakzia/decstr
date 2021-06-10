@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch.autograd import Variable
+from itertools import permutations
 import numpy as np
 
 
@@ -242,17 +243,17 @@ class Hulk(MessagePassing):
         self.state_size = state_size
 
         encoder_layer_sizes = [state_size] + inner_sizes
-        decoder_layer_sizes = [latent_size] + inner_sizes + [state_size]
+        decoder_layer_sizes = [latent_size] + inner_sizes + [3 * state_size]
 
+        self.linear_transform = nn.Linear(state_size, state_size)
         self.encoder = SimpleEncoder(encoder_layer_sizes, latent_size)
         self.decoder = SimpleDecoder(decoder_layer_sizes)
 
     def forward(self, state):
         batch_size = state.size(0)
-        state = torch.stack([torch.cat([state[:, i, :], state[:, j, :], abs(state[:, i, :] - state[:, j, :])], dim=-1)
-                           for i, j in [(0, 1), (0, 2), (1, 2)]])
-        # state = state.reshape(batch_size, state.size(1) * state.size(2))
-        means, log_var = self.encoder(state)
+        state = self.linear_transform(state)
+        encoder_inputs = torch.stack([state[:, i, :] + state[:, j, :] for i, j in permutations(np.arange(state.size(1)), 2)])
+        means, log_var = self.encoder(encoder_inputs)
 
         std = torch.exp(0.5 * log_var)
         eps = torch.randn([batch_size, self.latent_size])

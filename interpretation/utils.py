@@ -1,21 +1,22 @@
 import numpy as np
 from torch.utils.data import Dataset
 
-class GraphDataset(Dataset):
-    def __init__(self, continuous, configs):
+class TripletDataset(Dataset):
+    def __init__(self, anchor, positive, negative):
 
-        assert continuous.shape[0] == configs.shape[0]
+        assert anchor.shape[0] == positive.shape[0] == negative.shape[0]
 
-        self.ids = np.arange(continuous.shape[0])
+        self.ids = np.arange(anchor.shape[0])
         np.random.shuffle(self.ids)
 
-        self.continuous = continuous[self.ids].astype(np.float32)
-        self.configs = configs[self.ids].astype(np.float32)
+        self.anchor = anchor[self.ids].astype(np.float32)
+        self.positive = positive[self.ids].astype(np.float32)
+        self.negative = negative[self.ids].astype(np.float32)
 
 
     def __getitem__(self, index):
         idx = self.ids[index]
-        return self.continuous[idx], self.configs[idx]
+        return self.anchor[idx], self.positive[idx], self.negative[idx]
 
 
     def __len__(self):
