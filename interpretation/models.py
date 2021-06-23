@@ -7,17 +7,86 @@ from itertools import permutations
 import numpy as np
 
 
-def to_categorical(y, num_columns):
-    """Returns one-hot encoded Variable"""
-    y_cat = np.zeros((y.shape[0], num_columns))
-    y_cat[range(y.shape[0]), y] = 1.0
-
-    return Variable(torch.FloatTensor(y_cat))
-
 def init_weights(m):
     if type(m) == nn.Linear:
         torch.nn.init.xavier_uniform(m.weight)
         m.bias.data.fill_(0.01)
+
+
+class SimpleNetwork(nn.Module):
+
+    def __init__(self, layer_sizes, latent_size):
+
+        super().__init__()
+
+        self.MLP = nn.Sequential()
+        for i, (in_size, out_size) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:])):
+            self.MLP.add_module(
+                name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
+            # self.MLP.add_module(name='B:{:d}'.format(i), module=nn.BatchNorm1d(out_size))
+            self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
+
+        self.output_layer = nn.Linear(layer_sizes[-1], latent_size)
+        self.bn = nn.BatchNorm1d(latent_size)
+
+    def forward(self, x):
+        x = self.MLP(x)
+        x = self.output_layer(x)
+
+        return x
+
+
+class GraphNetwork(nn.Module):
+
+    def __init__(self, layer_sizes, latent_size):
+
+        super().__init__()
+
+        self.MLP1 = nn.Sequential()
+        for i, (in_size, out_size) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:])):
+            self.MLP1.add_module(
+                name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
+            # self.MLP.add_module(name='B:{:d}'.format(i), module=nn.BatchNorm1d(out_size))
+            self.MLP1.add_module(name="A{:d}".format(i), module=nn.ReLU())
+
+        self.MLP2 = nn.Linear(layer_sizes[-1], latent_size)
+        self.bn = nn.BatchNorm1d(latent_size)
+
+    def forward(self, x):
+        input_network = torch.stack([x[:, i, :] + x[:, j, :] for i, j in [(0, 1), (0, 2), (1, 2)]])
+        output_network = self.MLP1(input_network).sum(0)
+        z = self.bn(self.MLP2(output_network))
+
+        return z
+
+
+class SimpleModel(nn.Module):
+
+    def __init__(self, inner_sizes=[128, 128], state_size=9, output_size=2):
+        super().__init__()
+
+        assert type(inner_sizes) == list
+        assert type(output_size) == int
+        assert type(state_size) == int
+
+        self.latent_size = output_size
+        self.state_size = state_size
+
+        network_layer_sizes = [state_size] + inner_sizes
+
+        self.network = SimpleNetwork(network_layer_sizes, output_size)
+
+    def forward(self, states, positives, negatives):
+        states = states.reshape(-1, self.state_size)
+        positives = positives.reshape(-1, self.state_size)
+        negatives = negatives.reshape(-1, self.state_size)
+
+        phi_states = self.network(states)
+        phi_positives = self.network(positives)
+        phi_negatives = self.network(negatives)
+
+
+        return phi_states, phi_positives, phi_negatives
 
 
 class GATLayer(nn.Module):
@@ -62,209 +131,32 @@ class GATLayer(nn.Module):
         h_prime2 = h_prime[:, 6:, :]
         return h_prime1, h_prime2
 
-class SimpleCVAE(nn.Module):
 
-    def __init__(self, inner_sizes=[128, 128], state_size=3, latent_size=1):
+class GnnModel(nn.Module):
+
+    def __init__(self, inner_sizes=[32, 32], state_size=3, output_size=1):
         super().__init__()
 
         assert type(inner_sizes) == list
-        assert type(latent_size) == int
+        assert type(output_size) == int
         assert type(state_size) == int
 
-        self.latent_size = latent_size
+        self.output_size = output_size
         self.state_size = state_size
 
-        encoder_layer_sizes = [state_size] + inner_sizes
-        decoder_layer_sizes = [latent_size] + inner_sizes + [state_size]
+        self.W = nn.Linear(state_size, state_size, bias=False)
 
-        self.encoder = SimpleEncoder(encoder_layer_sizes, latent_size)
-        self.decoder = SimpleDecoder(decoder_layer_sizes)
+        network_layer_sizes = [state_size] + inner_sizes
 
-    def forward(self, state):
-        batch_size = state.size(0)
-        state = torch.cat([state[:, 0], state[:, 0], abs(state[:, 0] - state[:, 1])], dim=-1)
-        # state = state.reshape(batch_size, state.size(1) * state.size(2))
-        means, log_var = self.encoder(state)
+        self.network = GraphNetwork(network_layer_sizes, output_size)
 
-        std = torch.exp(0.5 * log_var)
-        eps = torch.randn([batch_size, self.latent_size])
-        z = eps * std + means
+    def forward(self, states, positives, negatives):
+        h_anchor = self.W(states)
+        h_positives = self.W(positives)
+        h_negatives = self.W(negatives)
 
-        recon_x = self.decoder(z)
-        return recon_x, means, log_var, z
+        phi_anchor = self.network(h_anchor)
+        phi_positives = self.network(h_positives)
+        phi_negatives = self.network(h_negatives)
 
-    def inference(self, n=1):
-
-        batch_size = n
-        z = torch.randn([batch_size, self.latent_size])
-        recon_state = self.decoder(z)
-
-        return recon_state
-
-
-class SimpleEncoder(nn.Module):
-
-    def __init__(self, layer_sizes, latent_size):
-
-        super().__init__()
-
-        self.MLP = nn.Sequential()
-        for i, (in_size, out_size) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:])):
-            self.MLP.add_module(
-                name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
-            self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
-
-        self.linear_means = nn.Linear(layer_sizes[-1], latent_size)
-        self.linear_log_var = nn.Linear(layer_sizes[-1], latent_size)
-
-    def forward(self, x):
-
-        x = self.MLP(x)
-        x = x.sum(0)
-
-        means = self.linear_means(x)
-        log_vars = self.linear_log_var(x)
-
-        return means, log_vars
-
-
-class SimpleDecoder(nn.Module):
-
-    def __init__(self, layer_sizes):
-
-        super().__init__()
-
-        self.MLP = nn.Sequential()
-
-        for i, (in_size, out_size) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:])):
-            self.MLP.add_module(
-                name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
-            if i + 2 < len(layer_sizes):
-                self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
-
-
-    def forward(self, z):
-
-        x = self.MLP(z)
-        return x
-
-
-class Encoder(nn.Module):
-
-    def __init__(self, input_size, latent_size, nb_predicates=2):
-
-        super().__init__()
-        self.MLP = [nn.Sequential(
-            nn.Linear(input_size, input_size)
-        ) for _ in range(nb_predicates)]
-
-        self.linear_means = [nn.Linear(input_size, latent_size) for _ in range(nb_predicates)]
-        self.linear_log_var = [nn.Linear(input_size, latent_size) for _ in range(nb_predicates)]
-
-        self.nb_predicates = nb_predicates
-
-    def forward(self, x):
-        assert type(x) == list
-        assert len(x) == self.nb_predicates
-        means, log_vars = [], []
-        for i, e in enumerate(x):
-            e = self.MLP[i](e)
-            m = self.linear_means[i](e)
-            l_v = self.linear_log_var[i](e)
-            means.append(m)
-            log_vars.append(l_v)
-        return means, log_vars
-
-
-class Decoder(nn.Module):
-    def __init__(self, input_size, output_size, nb_predicates=2):
-
-        super().__init__()
-        self.hidden_size = 3 * input_size
-
-        self.attention_layer = GATLayer(self.hidden_size, self.hidden_size, dropout=0.0, alpha=0.2, aggregation='sum')
-
-        # self.MLP = [nn.Sequential(nn.Linear(input_size, self.hidden_size),
-        #                           nn.ReLU())
-        #             for _ in range(nb_predicates)]
-        # self.readout = [nn.Sequential(nn.Linear(self.hidden_size, output_size),
-        #                           nn.Sigmoid())
-        #             for _ in range(nb_predicates)]
-
-        self.nb_predicates = nb_predicates
-        self.MLP_1 = nn.Sequential()
-        self.MLP_1.add_module(name="L0", module=nn.Linear(input_size, self.hidden_size))
-        self.MLP_1.add_module(name="A0", module=nn.ReLU())
-
-        self.readout_1 = nn.Sequential()
-        self.readout_1.add_module(name="L0", module=nn.Linear(self.hidden_size, output_size))
-
-        self.readout_1.add_module(name="sigmoid", module=nn.Sigmoid())
-
-        self.MLP_2 = nn.Sequential()
-        self.MLP_2.add_module(name="L0", module=nn.Linear(input_size, self.hidden_size))
-        self.MLP_2.add_module(name="A0", module=nn.ReLU())
-
-        self.readout_2 = nn.Sequential()
-        self.readout_2.add_module(name="L0", module=nn.Linear(self.hidden_size, output_size))
-
-        self.readout_2.add_module(name="sigmoid", module=nn.Sigmoid())
-
-    def forward(self, z1, z2):
-        # assert type(z) == list
-        # assert len(z) == self.nb_predicates
-        #
-        # recon_x = []
-        # for i, e in enumerate(z):
-        #     e = self.MLP[i](e)
-        #     e = self.readout[i](e)
-        #     recon_x.append(e)
-
-        x1 = self.MLP_1(z1)
-        x2 = self.MLP_2(z2)
-        # x1, x2 = self.attention_layer(x1, x2)
-
-        x1 = self.readout_1(x1)
-        x2 = self.readout_2(x2)
-
-        return [x1, x2]
-
-
-class Hulk(MessagePassing):
-
-    def __init__(self, inner_sizes=[128, 128], state_size=3, latent_size=1):
-        super().__init__()
-
-        assert type(inner_sizes) == list
-        assert type(latent_size) == int
-        assert type(state_size) == int
-
-        self.latent_size = latent_size
-        self.state_size = state_size
-
-        encoder_layer_sizes = [state_size] + inner_sizes
-        decoder_layer_sizes = [latent_size] + inner_sizes + [3 * state_size]
-
-        self.linear_transform = nn.Linear(state_size, state_size)
-        self.encoder = SimpleEncoder(encoder_layer_sizes, latent_size)
-        self.decoder = SimpleDecoder(decoder_layer_sizes)
-
-    def forward(self, state):
-        batch_size = state.size(0)
-        state = self.linear_transform(state)
-        encoder_inputs = torch.stack([state[:, i, :] + state[:, j, :] for i, j in permutations(np.arange(state.size(1)), 2)])
-        means, log_var = self.encoder(encoder_inputs)
-
-        std = torch.exp(0.5 * log_var)
-        eps = torch.randn([batch_size, self.latent_size])
-        z = eps * std + means
-
-        recon_x = self.decoder(z)
-        return recon_x, means, log_var, z
-
-    def inference(self, n=1):
-        batch_size = n
-        z = torch.randn([batch_size, self.latent_size])
-        recon_state = self.decoder(z)
-
-        return recon_state
+        return phi_anchor, phi_positives, phi_negatives
