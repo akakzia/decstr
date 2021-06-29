@@ -5,7 +5,8 @@ import numpy as np
 import pickle
 from utils import TripletDataset
 from collections import defaultdict
-from models import SimpleModel, GnnModel
+# from models import SimpleModel, GnnModel
+from graph_models import GnnModel
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.cluster import DBSCAN
@@ -74,14 +75,14 @@ def split_pos_neg(df):
 def plot_scatter_test(states, config_to_ids, configs_to_color):
     model.eval()
     pca = PCA(n_components=2)
-    out = model.network(model.W(torch.Tensor(states))).detach().numpy()
+    out = model.network(torch.Tensor(states)).detach().numpy()
     pca.fit(out)
     fig = plt.figure()
     ax = fig.add_subplot()
     cmap = get_cmap(len(list(config_to_ids.keys())))
     for i, c in enumerate(config_to_ids.keys()):
         input_state = torch.Tensor(states[config_to_ids[str(c)]])
-        embeddings = (model.network(model.W(input_state)).detach().numpy())
+        embeddings = (model.network(input_state).detach().numpy())
         y = pca.transform(embeddings)
         ax.scatter(y[:, 0], y[:, 1], color=cmap(i), label=str(c))
     plt.legend(title='legend', bbox_to_anchor=(1.05, 1), loc='upper left')
@@ -98,7 +99,7 @@ if __name__ == '__main__':
     delta_p = 0.001
     delta_n = 1
     learning_rate = 0.001
-    epochs = 10
+    epochs = 30
     n_points = 200
 
     with open('states_configs_no_rot.pkl', 'rb') as f:
@@ -108,7 +109,7 @@ if __name__ == '__main__':
     ids_to_config = {}
     configs_to_color = {}
     color_to_config = {}
-    test_ids = np.random.choice(np.arange(configs_test.shape[0]), size=n_points, replace=False)
+    test_ids = np.random.choice(np.arange(configs_test.shape[0]), size=configs_test.shape[0], replace=False)
     for j, c in zip(test_ids, configs_test[test_ids]):
         try:
             config_to_ids[str(c)].append(j)
@@ -122,6 +123,7 @@ if __name__ == '__main__':
     for k in range(1):
         print('Seed {} / 5'.format(k + 1))
         seed = np.random.randint(1e6)
+        print(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
 
@@ -129,7 +131,7 @@ if __name__ == '__main__':
         dataset = TripletDataset(data_anchor, data_positive, data_negative)
         data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
 
-        model = GnnModel(state_size=3, output_size=10)
+        model = GnnModel(state_size=6, output_size=1)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         optimizer_info = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -137,10 +139,13 @@ if __name__ == '__main__':
         logs = defaultdict(list)
 
         def loss_fn(a, a_positive, a_negative):
-            mse_pos = torch.nn.functional.mse_loss(a, a_positive, reduction='sum')
-            mse_neg = torch.nn.functional.mse_loss(a, a_negative, reduction='sum')
-            return (k_param * torch.nn.functional.relu((-mse_neg + delta_n)) + alpha * torch.nn.functional.relu(mse_pos - delta_p)) / a.size(0)
-
+            bce_pos = torch.nn.functional.kl_div(a, a_positive, reduction='sum')
+            bce_neg = torch.nn.functional.kl_div(a, a_negative, reduction='sum')
+            return (bce_pos - bce_neg) / a.size(0)
+            # mse_pos = torch.nn.functional.mse_loss(a, a_positive, reduction='sum')
+            # mse_neg = torch.nn.functional.mse_loss(a, a_negative, reduction='sum')
+            # return (k_param * torch.nn.functional.relu((-mse_neg + delta_n)) + alpha * torch.nn.functional.relu(mse_pos - delta_p)) / a.size(0)
+            # return (-mse_neg + mse_pos) / a.size(0)
         for epoch in range(epochs + 1):
             plot_scatter_test(states_test, config_to_ids, configs_to_color)
             for iteration, (states, positives, negatives) in enumerate(data_loader):
@@ -156,27 +161,35 @@ if __name__ == '__main__':
                 stop = 1
             print('Epoch {} / {} ---- | Loss = {}'.format(epoch, epochs, loss.item()))
 
-    embeddings = model.network(model.W(torch.Tensor(states_test[test_ids]))).detach().numpy()
+    the_states = states_test[test_ids]
+    the_configs = configs_test[test_ids]
+    embeddings = (model.network(torch.Tensor(the_states)).detach().numpy() > 0.5).astype(np.int)
+    discovered_classes = {str(e) for e in embeddings}
+    for cl in list(discovered_classes):
+        print('class {}'.format(cl))
+        ids = np.where(np.array([str(e) == cl for e in embeddings]))[0]
+        print({str(the_configs[i]) for i in ids})
+    stop = 1
 
     # pca = PCA(n_components=2)
     # pca.fit(embeddings)
     # y = pca.transform(embeddings)
 
-    db = DBSCAN(eps=0.1, min_samples=5).fit(embeddings)
-    core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
-    core_samples_mask[db.core_sample_indices_] = True
-    labels = db.labels_
-
-    # Number of clusters in labels, ignoring noise if present.
-    n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
-    print('Found {0} clusters.'.format(n_clusters_))
-    stop = 1
-    for label in np.unique(labels):
-        elements = set()
-        ids = np.where(labels == label)[0]
-        for id in ids:
-            elements.add(str(configs_test[test_ids[id]]))
-        print(label, elements)
+    # db = DBSCAN(eps=0.1, min_samples=5).fit(embeddings)
+    # core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
+    # core_samples_mask[db.core_sample_indices_] = True
+    # labels = db.labels_
+    #
+    # # Number of clusters in labels, ignoring noise if present.
+    # n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+    # print('Found {0} clusters.'.format(n_clusters_))
+    # stop = 1
+    # for label in np.unique(labels):
+    #     elements = set()
+    #     ids = np.where(labels == label)[0]
+    #     for id in ids:
+    #         elements.add(str(configs_test[test_ids[id]]))
+    #     print(label, elements)
     # fig = plt.figure()
     # ax = fig.add_subplot()
 
