@@ -27,7 +27,7 @@ def load_data(n=3, minimal=False):
     """
     Load the dataset of configurations and geometric states
     """
-    path_states_configs = '/home/ahmed/Documents/DECSTR/ICLR2021_version/decstr/interpretation/states_configs_no_rot.pkl'
+    path_states_configs = '/interpretation/data/states_configs_no_rot.pkl'
     with open(path_states_configs, 'rb') as f:
         state, configs = pickle.load(f)
 

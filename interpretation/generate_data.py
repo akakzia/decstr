@@ -18,6 +18,6 @@ for i in range(num_samples):
 
 states = np.array(states)
 configs = np.array(configs)
-with open('states_configs_no_rot.pkl', 'wb') as f:
+with open('data/states_configs_no_rot.pkl', 'wb') as f:
     pkl.dump((states, configs), f)
 stop = 1

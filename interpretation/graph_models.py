@@ -93,8 +93,18 @@ class GnnModel(nn.Module):
         self.network = GraphNetwork(network_layer_sizes, output_size)
 
     def forward(self, states, positives, negatives):
+        states = states.reshape(-1, 3, 3)
+        positives = positives.reshape(-1, 3, 3)
+        negatives = negatives.reshape(-1, 3, 3)
+        # aa = [n.shape[0] for n in negatives]
+        # len_neg = [0]
+        # for i, n in enumerate(negatives):
+        #     len_neg.append(len_neg[i] + n.shape[0])
+        # negatives = torch.cat(negatives).reshape(-1, 3, 3)
         z_anchor = self.network(states)
         z_positives = self.network(positives)
         z_negatives = self.network(negatives)
+
+        # z_negatives = torch.cat([z_negatives[len_neg[i]:len_neg[i+1]].sum(0) for i in range(states.shape[0])]).reshape(states.shape[0], -1)
 
         return z_anchor, z_positives, z_negatives
